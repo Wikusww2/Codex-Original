@@ -74,6 +74,7 @@ function stubProps(): any {
     contextLeftPercent: 100,
     openOverlay: vi.fn(),
     openModelOverlay: vi.fn(),
+    openProviderOverlay: vi.fn(),
     openHelpOverlay: vi.fn(),
     interruptAgent: vi.fn(),
     active: true,

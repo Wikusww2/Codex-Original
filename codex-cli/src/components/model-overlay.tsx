@@ -21,6 +21,8 @@ type Props = {
   providers?: Record<string, { name: string; baseURL: string; envKey: string }>;
   onSelect: (allModels: Array<string>, model: string) => void;
   onSelectProvider?: (provider: string) => void;
+  /** Start the overlay in provider selection mode */
+  startMode?: "model" | "provider";
   onExit: () => void;
 };
 
@@ -31,6 +33,7 @@ export default function ModelOverlay({
   hasLastResponse,
   onSelect,
   onSelectProvider,
+  startMode = "model",
   onExit,
 }: Props): JSX.Element {
   const [items, setItems] = useState<Array<{ label: string; value: string }>>(
@@ -39,7 +42,7 @@ export default function ModelOverlay({
   const [providerItems, _setProviderItems] = useState<
     Array<{ label: string; value: string }>
   >(Object.values(providers).map((p) => ({ label: p.name, value: p.name })));
-  const [mode, setMode] = useState<"model" | "provider">("model");
+  const [mode, setMode] = useState<"model" | "provider">(startMode);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // This effect will run when the provider changes to update the model list

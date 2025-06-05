@@ -52,6 +52,7 @@ describe("/clear command", () => {
       contextLeftPercent: 100,
       openOverlay: () => {},
       openModelOverlay: () => {},
+      openProviderOverlay: () => {},
       openApprovalOverlay: () => {},
       openHelpOverlay: () => {},
       openDiffOverlay: () => {},
