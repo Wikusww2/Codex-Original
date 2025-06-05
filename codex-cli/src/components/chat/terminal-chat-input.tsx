@@ -34,6 +34,7 @@ export interface TerminalChatInputProps {
   setItems: any; 
   openOverlay: () => void;
   openModelOverlay: () => void;
+  openProviderOverlay: () => void;
   openApprovalOverlay: () => void;
   openHelpOverlay: () => void;
   openDiffOverlay: () => void;
@@ -53,6 +54,7 @@ export default function TerminalChatInput({
   setItems,
   openOverlay,
   openModelOverlay,
+  openProviderOverlay,
   openApprovalOverlay,
   openHelpOverlay,
   openDiffOverlay,
@@ -188,11 +190,15 @@ export default function TerminalChatInput({
             openHelpOverlay();
             return;
           }
-          if (command.command === "/model") { 
+          if (command.command === "/model") {
             openModelOverlay();
             return;
           }
-          if (command.command === "/approval") { 
+          if (command.command === "/provider") {
+            openProviderOverlay();
+            return;
+          }
+          if (command.command === "/approval") {
             openApprovalOverlay();
             return;
           }
@@ -240,6 +246,7 @@ export default function TerminalChatInput({
       onCompact,
       openHelpOverlay,
       openModelOverlay,
+      openProviderOverlay,
       openApprovalOverlay,
       openSessionsOverlay,
       setLastResponseId,
