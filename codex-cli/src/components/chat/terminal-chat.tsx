@@ -50,6 +50,7 @@ export type OverlayModeType =
   | "history"
   | "sessions"
   | "model"
+  | "provider"
   | "approval"
   | "diff"
   | "help";
@@ -488,6 +489,7 @@ export const TerminalChat: React.FC<Props> = ({
           setItems={setItems}
           openOverlay={() => setOverlayMode("help")}
           openModelOverlay={() => setOverlayMode("model")}
+          openProviderOverlay={() => setOverlayMode("provider")}
           openApprovalOverlay={() => setOverlayMode("approval")}
           openHelpOverlay={() => setOverlayMode("help")}
           openDiffOverlay={() => setOverlayMode("diff")}
@@ -616,8 +618,107 @@ export const TerminalChat: React.FC<Props> = ({
                 ],
               },
             ]);
+          }}
+          onExit={() => setOverlayMode("none")}
+        />
+      )}
+      {overlayMode === "provider" && (
+        <ModelOverlay
+          currentModel={model}
+          providers={config.providers}
+          currentProvider={provider}
+          hasLastResponse={Boolean(lastResponseId)}
+          startMode="provider"
+          onSelect={(allModels, newModel) => {
+            log(
+              "TerminalChat: interruptAgent invoked – calling agent.cancel()",
+            );
+            if (!agentRef.current) {
+              log("TerminalChat: agent is not ready yet");
+            }
+            agentRef.current?.cancel();
+            setLoading(false);
+
+            if (!allModels?.includes(newModel)) {
+              console.error(
+                chalk.bold.red(
+                  `Model "${chalk.yellow(
+                    newModel,
+                  )}" is not available for provider "${chalk.yellow(
+                    provider,
+                  )}".`,
+                ),
+              );
+              return;
+            }
+
+            setModel(newModel);
+            setLastResponseId((prev) =>
+              prev && newModel !== model ? null : prev,
+            );
+
+            saveConfig({
+              ...config,
+              model: newModel,
+              provider: provider,
+            });
+
+            setItems((prev) => [
+              ...prev,
+              {
+                id: `switch-model-${Date.now()}`,
+                type: "message",
+                role: "system",
+                content: [
+                  {
+                    type: "input_text",
+                    text: `Switched model to ${newModel}`,
+                  },
+                ],
+              },
+            ]);
 
             setOverlayMode("none");
+          }}
+          onSelectProvider={(newProvider) => {
+            log(
+              "TerminalChat: interruptAgent invoked – calling agent.cancel()",
+            );
+            if (!agentRef.current) {
+              log("TerminalChat: agent is not ready yet");
+            }
+            agentRef.current?.cancel();
+            setLoading(false);
+
+            const defaultModel = model;
+
+            const updatedConfig = {
+              ...config,
+              provider: newProvider,
+              model: defaultModel,
+            };
+            saveConfig(updatedConfig);
+
+            setProvider(newProvider);
+            setModel(defaultModel);
+            setLastResponseId((prev) =>
+              prev && newProvider !== provider ? null : prev,
+            );
+
+            setItems((prev) => [
+              ...prev,
+              {
+                id: `switch-provider-${Date.now()}`,
+                type: "message",
+                role: "system",
+                content: [
+                  {
+                    type: "input_text",
+                    text: `Switched provider to ${newProvider} with model ${defaultModel}`,
+                  },
+                ],
+              },
+            ]);
           }}
           onExit={() => setOverlayMode("none")}
         />
