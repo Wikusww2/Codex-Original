@@ -15,6 +15,7 @@ export interface TerminalHeaderProps {
   agent?: AgentLoop;
   initialImagePaths?: Array<string>;
   flexModeEnabled?: boolean;
+  workdir?: string;
 }
 
 const TerminalHeader: React.FC<TerminalHeaderProps> = ({
@@ -28,6 +29,7 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
   agent,
   initialImagePaths,
   flexModeEnabled = false,
+  workdir,
 }) => {
   return (
     <>
@@ -62,7 +64,7 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
               </Text>
             </Text>
             <Text dimColor>
-              <Text color="blueBright">↳</Text> workdir: <Text bold>{PWD}</Text>
+              <Text color="blueBright">↳</Text> workdir: <Text bold>{workdir || PWD}</Text>
             </Text>
             <Text dimColor>
               <Text color="blueBright">↳</Text> model: <Text bold>{model}</Text>

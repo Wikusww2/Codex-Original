@@ -1,11 +1,10 @@
 import type { CommandConfirmation } from "./agent-loop.js";
-import type { ApplyPatchCommand, ApprovalPolicy } from "../../approvals.js";
+import type { ApplyPatchCommand, ApprovalPolicy, SafetyAssessment } from "../../approvals.js";
 import type { ExecInput } from "./sandbox/interface.js";
 import type { ResponseInputItem } from "openai/resources/responses/responses.mjs";
 
 import { canAutoApprove } from "../../approvals.js";
 import { formatCommandForDisplay } from "../../format-command.js";
-import { FullAutoErrorMode } from "../auto-approval-mode.js";
 import { CODEX_UNSAFE_ALLOW_NO_SANDBOX, type AppConfig } from "../config.js";
 import { exec, execApplyPatch } from "./exec.js";
 import { ReviewDecision } from "./review.js";
@@ -69,6 +68,7 @@ type HandleExecCommandResult = {
   outputText: string;
   metadata: Record<string, unknown>;
   additionalItems?: Array<ResponseInputItem>;
+  newWorkdir?: string;
 };
 
 export async function handleExecCommand(
@@ -77,6 +77,7 @@ export async function handleExecCommand(
   policy: ApprovalPolicy,
   additionalWritableRoots: ReadonlyArray<string>,
   getCommandConfirmation: (
+    safetyAssessment: SafetyAssessment,
     command: Array<string>,
     applyPatch: ApplyPatchCommand | undefined,
   ) => Promise<CommandConfirmation>,
@@ -86,121 +87,122 @@ export async function handleExecCommand(
 
   const key = deriveCommandKey(command);
 
-  // 1) If the user has already said "always approve", skip
-  //    any policy & never sandbox.
+  // 1) If the user has already said "always approve" for this command key, skip
+  //    any policy checks & never sandbox.
   if (alwaysApprovedCommands.has(key)) {
     return execCommand(
       args,
-      /* applyPatch */ undefined,
-      /* runInSandbox */ false,
+      undefined, // applyPatch is not relevant here as it's a general command approval
+      false, // Explicitly false because user said "always"
       additionalWritableRoots,
       config,
       abortSignal,
     ).then(convertSummaryToResult);
   }
 
-  // 2) Otherwise fall back to the normal policy
-  // `canAutoApprove` now requires the list of writable roots that the command
-  // is allowed to modify.  For the CLI we conservatively pass the current
-  // working directory so that edits are constrained to the project root.  If
-  // the caller wishes to broaden or restrict the set it can be made
-  // configurable in the future.
-  const safety = canAutoApprove(command, workdir, policy, [process.cwd()]);
-
-  let runInSandbox: boolean;
-  switch (safety.type) {
-    case "ask-user": {
-      const review = await askUserPermission(
-        args,
-        safety.applyPatch,
-        getCommandConfirmation,
-      );
-      if (review != null) {
-        return review;
-      }
-
-      runInSandbox = false;
-      break;
-    }
-    case "auto-approve": {
-      runInSandbox = safety.runInSandbox;
-      break;
-    }
-    case "reject": {
-      return {
-        outputText: "aborted",
-        metadata: {
-          error: "command rejected",
-          reason: "Command rejected by auto-approval system.",
-        },
-      };
-    }
-  }
-
-  const { applyPatch } = safety;
-  const summary = await execCommand(
-    args,
-    applyPatch,
-    runInSandbox,
+  // 2) Determine safety assessment using canAutoApprove
+  const assessment = canAutoApprove(
+    command,
+    workdir,
+    policy,
     additionalWritableRoots,
-    config,
-    abortSignal,
+    // process.env, // canAutoApprove defaults to process.env if not provided
   );
-  // If the operation was aborted in the meantime, propagate the cancellation
-  // upward by returning an empty (no-op) result so that the agent loop will
-  // exit cleanly without emitting spurious output.
-  if (abortSignal?.aborted) {
-    return {
-      outputText: "",
-      metadata: {},
-    };
-  }
-  if (
-    summary.exitCode !== 0 &&
-    runInSandbox &&
-    // Default: If the user has configured to ignore and continue,
-    // skip re-running the command.
-    //
-    // Otherwise, if they selected "ask-user", then we should ask the user
-    // for permission to re-run the command outside of the sandbox.
-    config.fullAutoErrorMode &&
-    config.fullAutoErrorMode === FullAutoErrorMode.ASK_USER
-  ) {
-    const review = await askUserPermission(
+
+  // Determine if this is an apply_patch command for later
+  // This is a bit redundant if assessment.applyPatch is populated, but good for clarity
+  const applyPatchCommandDetails =
+    assessment.applyPatch ??
+    (command[0] === "apply_patch" && command.length === 2 && typeof command[1] === "string"
+      ? { patch: command[1] }
+      : undefined);
+
+  // 3) Based on assessment and policy, decide next steps
+  if (assessment.type === "auto-approve") {
+    // If canAutoApprove says to auto-approve, respect it.
+    // The runInSandbox flag from the assessment will be used by execCommand.
+    return execCommand(
       args,
-      safety.applyPatch,
+      applyPatchCommandDetails, // Pass applyPatch details from assessment or derived
+      assessment.runInSandbox,
+      additionalWritableRoots,
+      config,
+      abortSignal,
+    ).then(convertSummaryToResult);
+  } else if (assessment.type === "reject") {
+    // If canAutoApprove says to reject, do so.
+    return {
+      outputText: "rejected",
+      metadata: { reason: assessment.reason },
+      additionalItems: [
+        {
+          type: "message",
+          role: "user", // Or system, depending on how you want it to appear
+          content: [{ type: "input_text", text: `Command rejected: ${assessment.reason}` }],
+        },
+      ],
+    };
+  } else { // assessment.type === "ask-user"
+    // If canAutoApprove says to ask the user, then proceed to ask.
+    const userPermissionResult = await askUserPermission(
+      args,
+      applyPatchCommandDetails,
+      assessment, // Pass the assessment
       getCommandConfirmation,
     );
-    if (review != null) {
-      return review;
-    } else {
-      // The user has approved the command, so we will run it outside of the
-      // sandbox.
-      const summary = await execCommand(
-        args,
-        applyPatch,
-        false,
-        additionalWritableRoots,
-        config,
-        abortSignal,
-      );
-      return convertSummaryToResult(summary);
+
+    if (userPermissionResult) { // User denied or wants to stop
+      return userPermissionResult;
     }
-  } else {
-    return convertSummaryToResult(summary);
+
+    // User approved (or decision was EXPLAIN, which means proceed without explicit approval yet)
+    // Determine sandboxing for user-approved commands after an "ask-user" assessment.
+    let runInSandboxAfterUserApproval = false;
+    if (policy === "full-auto") {
+        // If the policy is full-auto and canAutoApprove still decided to ask the user,
+        // it implies the command wasn't simple enough for the direct auto-approve paths
+        // (which would have set runInSandbox: false if they were hit).
+        // In this case, if the user approves, we should still honor the 'full-auto'
+        // intent of running in a sandbox as a default precaution for this policy.
+        runInSandboxAfterUserApproval = true;
+    }
+    // For 'suggest', 'auto-edit', or 'none' (though 'none' shouldn't reach 'ask-user'),
+    // if the user explicitly approves after being asked, run without a sandbox.
+
+    return execCommand(
+      args,
+      applyPatchCommandDetails,
+      runInSandboxAfterUserApproval,
+      additionalWritableRoots,
+      config,
+      abortSignal,
+    ).then(convertSummaryToResult);
   }
 }
 
 function convertSummaryToResult(
   summary: ExecCommandSummary,
 ): HandleExecCommandResult {
-  const { stdout, stderr, exitCode, durationMs } = summary;
+  const { stdout, stderr, exitCode, durationMs, newWorkdir } = summary;
+  const rawOutput = stdout || stderr || `(code: ${exitCode}, duration: ${Math.round(durationMs / 1000)}s)`;
+  
+  // IMPORTANT: OpenAI tool output seems to expect plain text for shell outputs
+  // So we're returning the raw command output directly instead of JSON
+  // This is the most compatible format based on the error messages
+  const outputText = rawOutput;
+
+  // Log the output format for debugging
+  console.log(`[convertSummaryToResult] Formatting command output as plain text: ${outputText.substring(0, 100)}${outputText.length > 100 ? '...' : ''}`);
+
   return {
-    outputText: stdout || stderr,
+    outputText, 
     metadata: {
-      exit_code: exitCode,
-      duration_seconds: Math.round(durationMs / 100) / 10,
+      exitCode,
+      durationMs,
+      raw_stdout: stdout, 
+      raw_stderr: stderr,
     },
+    ...(newWorkdir && { newWorkdir }),
   };
 }
 
@@ -209,6 +211,7 @@ type ExecCommandSummary = {
   stderr: string;
   exitCode: number;
   durationMs: number;
+  newWorkdir?: string;
 };
 
 async function execCommand(
@@ -332,12 +335,15 @@ async function getSandbox(runInSandbox: boolean): Promise<SandboxType> {
 async function askUserPermission(
   args: ExecInput,
   applyPatchCommand: ApplyPatchCommand | undefined,
+  safetyAssessment: SafetyAssessment,
   getCommandConfirmation: (
+    safetyAssessment: SafetyAssessment,
     command: Array<string>,
     applyPatch: ApplyPatchCommand | undefined,
   ) => Promise<CommandConfirmation>,
 ): Promise<HandleExecCommandResult | null> {
   const { review: decision, customDenyMessage } = await getCommandConfirmation(
+    safetyAssessment,
     args.cmd,
     applyPatchCommand,
   );

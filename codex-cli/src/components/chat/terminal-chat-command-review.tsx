@@ -1,4 +1,5 @@
 import { ReviewDecision } from "../../utils/agent/review";
+import type { ConfirmationResult } from "../../hooks/use-confirmation.js";
 // TODO: figure out why `cli-spinners` fails on Node v20.9.0
 // which is why we have to do this in the first place
 //
@@ -22,7 +23,7 @@ export function TerminalChatCommandReview({
   isActive = true,
 }: {
   confirmationPrompt: React.ReactNode;
-  onReviewCommand: (decision: ReviewDecision, customMessage?: string) => void;
+  onReviewCommand: (result: ConfirmationResult) => void;
   onSwitchApprovalMode: () => void;
   explanation?: string;
   // when false, disable the underlying Select so it won't capture input
@@ -76,6 +77,7 @@ export function TerminalChatCommandReview({
   const approvalOptions = React.useMemo(() => {
     const opts: Array<
       | { label: string; value: ReviewDecision }
+      | { label: string; value: "explain" }
       | { label: string; value: "edit" }
       | { label: string; value: "switch" }
     > = [
@@ -95,7 +97,7 @@ export function TerminalChatCommandReview({
     opts.push(
       {
         label: "Explain this command (x)",
-        value: ReviewDecision.EXPLAIN,
+        value: "explain",
       },
       {
         label: "Edit or give feedback (e)",
@@ -123,23 +125,20 @@ export function TerminalChatCommandReview({
     (input, key) => {
       if (mode === "select") {
         if (input === "y") {
-          onReviewCommand(ReviewDecision.YES);
-        } else if (input === "x") {
-          onReviewCommand(ReviewDecision.EXPLAIN);
+          onReviewCommand({ decision: ReviewDecision.YES });
+        } else if (input === "n") {
+          onReviewCommand({ decision: ReviewDecision.NO_CONTINUE });
         } else if (input === "e") {
           setMode("input");
-        } else if (input === "n") {
-          onReviewCommand(
-            ReviewDecision.NO_CONTINUE,
-            "Don't do that, keep going though",
-          );
+        } else if (input === "x") {
+          onReviewCommand({ decision: ReviewDecision.EXPLAIN });
         } else if (input === "a" && showAlwaysApprove) {
-          onReviewCommand(ReviewDecision.ALWAYS);
+          onReviewCommand({ decision: ReviewDecision.ALWAYS });
         } else if (input === "s") {
           // switch approval mode
           onSwitchApprovalMode();
         } else if (key.escape) {
-          onReviewCommand(ReviewDecision.NO_EXIT);
+          onReviewCommand({ decision: ReviewDecision.NO_EXIT });
         }
       } else if (mode === "explanation") {
         // When in explanation mode, any key returns to select mode
@@ -151,13 +150,13 @@ export function TerminalChatCommandReview({
         if (key.return) {
           // if user hit enter on empty msg, fall back to DEFAULT_DENY_MESSAGE
           const custom = msg.trim() === "" ? DEFAULT_DENY_MESSAGE : msg;
-          onReviewCommand(ReviewDecision.NO_CONTINUE, custom);
+          onReviewCommand({ decision: ReviewDecision.NO_CONTINUE, customDenyMessage: custom });
         } else if (key.escape) {
           // treat escape as denial with default message as well
-          onReviewCommand(
-            ReviewDecision.NO_CONTINUE,
-            msg.trim() === "" ? DEFAULT_DENY_MESSAGE : msg,
-          );
+          onReviewCommand({
+            decision: ReviewDecision.NO_CONTINUE,
+            customDenyMessage: msg.trim() === "" ? DEFAULT_DENY_MESSAGE : msg,
+          });
         }
       }
     },
@@ -212,13 +211,15 @@ export function TerminalChatCommandReview({
               <Select
                 isDisabled={!isActive}
                 visibleOptionCount={approvalOptions.length}
-                onChange={(value: ReviewDecision | "edit" | "switch") => {
+                onChange={(value: ReviewDecision | "edit" | "switch" | "explain") => {
                   if (value === "edit") {
                     setMode("input");
                   } else if (value === "switch") {
                     onSwitchApprovalMode();
+                  } else if (value === "explain") {
+                    onReviewCommand({ decision: ReviewDecision.EXPLAIN });
                   } else {
-                    onReviewCommand(value);
+                    onReviewCommand({ decision: value as ReviewDecision });
                   }
                 }}
                 options={approvalOptions}

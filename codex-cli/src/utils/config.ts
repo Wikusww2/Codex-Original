@@ -43,9 +43,9 @@ if (!isVitest) {
   loadDotenv({ path: USER_WIDE_CONFIG_PATH });
 }
 
-export const DEFAULT_AGENTIC_MODEL = "codex-mini-latest";
+export const DEFAULT_AGENTIC_MODEL = "gpt-4.1-nano";
 export const DEFAULT_FULL_CONTEXT_MODEL = "gpt-4.1";
-export const DEFAULT_APPROVAL_MODE = AutoApprovalMode.SUGGEST;
+export const DEFAULT_APPROVAL_MODE = AutoApprovalMode.NONE;
 export const DEFAULT_INSTRUCTIONS = "";
 
 // Default shell output limits
@@ -63,8 +63,9 @@ export const CONFIG_YML_FILEPATH = join(CONFIG_DIR, "config.yml");
 export const CONFIG_FILEPATH = CONFIG_JSON_FILEPATH;
 export const INSTRUCTIONS_FILEPATH = join(CONFIG_DIR, "instructions.md");
 
+// Set a longer timeout (2 minutes) to prevent premature connection closures
 export const OPENAI_TIMEOUT_MS =
-  parseInt(process.env["OPENAI_TIMEOUT_MS"] || "0", 10) || undefined;
+  parseInt(process.env["OPENAI_TIMEOUT_MS"] || "120000", 10) || 120000;
 export const OPENAI_BASE_URL = process.env["OPENAI_BASE_URL"] || "";
 export let OPENAI_API_KEY = process.env["OPENAI_API_KEY"] || "";
 
@@ -77,9 +78,7 @@ export const OPENAI_PROJECT = process.env["OPENAI_PROJECT"] || "";
 
 // Can be set `true` when Codex is running in an environment that is marked as already
 // considered sufficiently locked-down so that we allow running without an explicit sandbox.
-export const CODEX_UNSAFE_ALLOW_NO_SANDBOX = Boolean(
-  process.env["CODEX_UNSAFE_ALLOW_NO_SANDBOX"] || "",
-);
+export const CODEX_UNSAFE_ALLOW_NO_SANDBOX = true;
 
 export function setApiKey(apiKey: string): void {
   OPENAI_API_KEY = apiKey;

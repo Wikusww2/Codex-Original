@@ -17,18 +17,57 @@ import { parse } from "shell-quote";
 import { resolvePathAgainstWorkdir } from "src/approvals.js";
 import { PATCH_SUFFIX } from "src/parse-apply-patch.js";
 
-const DEFAULT_TIMEOUT_MS = 10_000; // 10 seconds
+const DEFAULT_TIMEOUT_MS = 60_000; // 60 seconds - increased to allow more complex operations
 
-function requiresShell(cmd: Array<string>): boolean {
+export function requiresShell(cmd: Array<string>): boolean {
+  console.log(`[requiresShell] invoked with cmd: ${JSON.stringify(cmd)}`);
+  const firstCommand = cmd[0]?.toLowerCase();
+
+  if (process.platform === "win32") {
+    // List of common Windows CMD built-ins. This list is not exhaustive
+    // but covers many common commands that would be translated from Unix-like systems
+    // or used directly.
+    const windowsBuiltIns = [
+      "assoc", "attrib", "break", "bcdedit", "cacls", "call", "cd", "chcp", "chdir", "chkdsk", "chkntfs",
+      "cls", "cmd", "color", "comp", "compact", "convert", "copy", "date", "del", "dir", "diskcomp",
+      "diskcopy", "diskpart", "doskey", "driverquery", "echo", "endlocal", "erase", "fc", "find",
+      "findstr", "for", "format", "fsutil", "ftype", "goto", "gpresult", "graftabl", "help", "icacls",
+      "if", "label", "md", "mkdir", "mklink", "mode", "more", "move", "openfiles", "path", "pause",
+      "popd", "print", "prompt", "pushd", "rd", "recover", "rem", "ren", "rename", "replace",
+      "rmdir", "robocopy", "set", "setlocal", "sc", "schtasks", "shift", "shutdown", "sort", "start",
+      "subst", "systeminfo", "tasklist", "taskkill", "time", "title", "tree", "type", "ver", "verify",
+      "vol", "xcopy",
+      // Add PowerShell to the list of commands that require a shell
+      "powershell", "pwsh",
+      // Common PowerShell cmdlets/aliases that might be invoked if cmd.exe is the shell.
+      // While `shell: true` on Windows defaults to `cmd.exe`, if a user's PATH
+      // somehow led to PowerShell being invoked for these, this helps.
+      // However, the primary target here is `cmd.exe` built-ins.
+      "get-childitem", "select-string", "get-content", "set-content",
+      "remove-item", "copy-item", "move-item", "rename-item", "new-item"
+    ];
+    console.log(`[requiresShell] platform: ${process.platform}, firstCommand: ${firstCommand}`);
+    if (firstCommand && windowsBuiltIns.includes(firstCommand)) {
+      console.log(`[requiresShell] Matched Windows built-in: ${firstCommand}. Returning true.`);
+      return true;
+    }
+  }
+
+  // Original logic for shell operators:
   // If the command is a single string that contains shell operators,
   // it needs to be run with shell: true
   if (cmd.length === 1 && cmd[0] !== undefined) {
+    // 'parse' is imported from 'shell-quote'
     const tokens = parse(cmd[0]) as Array<ParseEntry>;
-    return tokens.some((token) => typeof token === "object" && "op" in token);
+    const needsShellForOperator = tokens.some((token) => typeof token === "object" && "op" in token);
+    console.log(`[requiresShell] Needs shell for operator: ${needsShellForOperator}`);
+    return needsShellForOperator;
   }
 
-  // If the command is split into multiple arguments, we don't need shell: true
-  // even if one of the arguments is a shell operator like '|'
+  // If the command is split into multiple arguments (and not a Windows built-in from above),
+  // we don't need shell: true even if one of the arguments is a shell operator like '|'.
+  // The individual program would handle its arguments.
+  console.log('[requiresShell] No shell needed by default. Returning false.');
   return false;
 }
 
@@ -47,36 +86,73 @@ export function exec(
   config: AppConfig,
   abortSignal?: AbortSignal,
 ): Promise<ExecResult> {
+  let commandToExecute = [...cmd]; // Clone to allow modification
+  let isCdCommand = false;
+  const originalCommandForLogging = [...cmd]; // For logging, if we modify commandToExecute
+
+  if (cmd[0]?.toLowerCase() === "cd" && cmd.length > 1) {
+    isCdCommand = true;
+    const cdArgs = cmd.slice(1).join(" ");
+    const dirSuffix = process.platform === "win32" ? " && cd" : " && pwd";
+    // Combine into a single command string for shell execution
+    commandToExecute = [`cd ${cdArgs}${dirSuffix}`]; 
+  }
+
   const opts: SpawnOptions = {
     timeout: timeoutInMillis || DEFAULT_TIMEOUT_MS,
-    ...(requiresShell(cmd) ? { shell: true } : {}),
+    // If it's a cd command modified for pwd/cd, it definitely needs a shell.
+    // Otherwise, use requiresShell for the original command.
+    ...(isCdCommand || requiresShell(originalCommandForLogging) ? { shell: true } : {}),
     ...(workdir ? { cwd: workdir } : {}),
   };
 
+  // Choose the executor based on sandbox type
+  let executorPromise: Promise<ExecResult>;
   switch (sandbox) {
     case SandboxType.NONE: {
-      // SandboxType.NONE uses the raw exec implementation.
-      return rawExec(cmd, opts, config, abortSignal);
+      executorPromise = rawExec(commandToExecute, opts, config, abortSignal);
+      break;
     }
     case SandboxType.MACOS_SEATBELT: {
-      // Merge default writable roots with any user-specified ones.
       const writableRoots = [
         process.cwd(),
         os.tmpdir(),
         ...additionalWritableRoots,
       ];
-      return execWithSeatbelt(cmd, opts, writableRoots, config, abortSignal);
+      executorPromise = execWithSeatbelt(commandToExecute, opts, writableRoots, config, abortSignal);
+      break;
     }
     case SandboxType.LINUX_LANDLOCK: {
-      return execWithLandlock(
-        cmd,
+      executorPromise = execWithLandlock(
+        commandToExecute,
         opts,
         additionalWritableRoots,
         config,
         abortSignal,
       );
+      break;
     }
+    default: // Should not happen
+      return Promise.resolve({
+        stdout: "",
+        stderr: `Unknown sandbox type: ${sandbox}`,
+        exitCode: 1,
+      });
   }
+
+  return executorPromise.then(result => {
+    if (isCdCommand && result.exitCode === 0 && result.stdout) {
+      const lines = result.stdout.trim().split(/\r?\n/);
+      const newPath = lines.pop()?.trim(); // Get the last non-empty line
+      if (newPath) {
+        // Potentially resolve relative paths against the previous workdir
+        // or ensure it's an absolute path.
+        // For now, assume the output of pwd/cd is absolute or resolvable from current context.
+        return { ...result, newWorkdir: newPath };
+      }
+    }
+    return result;
+  });
 }
 
 export function execApplyPatch(

@@ -42,16 +42,16 @@ export default function TerminalChatResponseItem({
           fileOpener={fileOpener}
         />
       );
-    // @ts-expect-error new item types aren't in SDK yet
     case "local_shell_call":
     case "function_call":
-      return <TerminalChatResponseToolCall message={item} />;
-    // @ts-expect-error new item types aren't in SDK yet
+      // Cast to appropriate type since these item types may not be in the SDK type definitions yet
+      return <TerminalChatResponseToolCall message={item as ResponseFunctionToolCallItem} />;
     case "local_shell_call_output":
     case "function_call_output":
+      // Cast to appropriate type since these item types may not be in the SDK type definitions yet
       return (
         <TerminalChatResponseToolCallOutput
-          message={item}
+          message={item as ResponseFunctionToolCallOutputItem}
           fullStdout={fullStdout}
         />
       );
@@ -250,12 +250,16 @@ function TerminalChatResponseToolCallOutput({
     })
     .join("\n");
   return (
-    <Box flexDirection="column" gap={1}>
-      <Text color="magenta" bold>
-        command.stdout{" "}
-        <Text dimColor>{metadataInfo ? `(${metadataInfo})` : ""}</Text>
-      </Text>
-      <Text dimColor>{colorizedContent}</Text>
+    <Box flexDirection="column" gap={1} width="100%">
+      <Box width="100%">
+        <Text color="magenta" bold>
+          command.stdout{" "}
+          <Text dimColor>{metadataInfo ? `(${metadataInfo})` : ""}</Text>
+        </Text>
+      </Box>
+      <Box width="100%" overflow="hidden">
+        <Text dimColor wrap="wrap">{colorizedContent}</Text>
+      </Box>
     </Box>
   );
 }

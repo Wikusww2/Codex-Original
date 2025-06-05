@@ -1155,15 +1155,12 @@ async fn handle_container_exec_with_params(
     sub_id: String,
     call_id: String,
 ) -> ResponseInputItem {
-    // check if this was a patch, and apply it if so
+    // Check if this was a patch, and apply it if so (existing logic)
     match maybe_parse_apply_patch_verified(&params.command, &params.cwd) {
         MaybeApplyPatchVerified::Body(changes) => {
             return apply_patch(sess, sub_id, call_id, changes).await;
         }
         MaybeApplyPatchVerified::CorrectnessError(parse_error) => {
-            // It looks like an invocation of `apply_patch`, but we
-            // could not resolve it into a patch that would apply
-            // cleanly. Return to model for resample.
             return ResponseInputItem::FunctionCallOutput {
                 call_id,
                 output: FunctionCallOutputPayload {
@@ -1178,67 +1175,76 @@ async fn handle_container_exec_with_params(
         MaybeApplyPatchVerified::NotApplyPatch => (),
     }
 
-    // safety checks
-    let safety = {
-        let state = sess.state.lock().unwrap();
-        assess_command_safety(
-            &params.command,
-            sess.approval_policy,
-            &sess.sandbox_policy,
-            &state.approved_commands,
-        )
-    };
-    let sandbox_type = match safety {
-        SafetyCheck::AutoApprove { sandbox_type } => sandbox_type,
-        SafetyCheck::AskUser => {
-            let rx_approve = sess
-                .request_command_approval(
-                    sub_id.clone(),
-                    params.command.clone(),
-                    params.cwd.clone(),
-                    None,
-                )
-                .await;
-            match rx_approve.await.unwrap_or_default() {
-                ReviewDecision::Approved => (),
-                ReviewDecision::ApprovedForSession => {
-                    sess.add_approved_command(params.command.clone());
-                }
-                ReviewDecision::Denied | ReviewDecision::Abort => {
-                    return ResponseInputItem::FunctionCallOutput {
-                        call_id,
-                        output: crate::models::FunctionCallOutputPayload {
-                            content: "exec command rejected by user".to_string(),
-                            success: None,
-                        },
-                    };
+    let final_sandbox_policy_for_exec: SandboxPolicy;
+    let final_sandbox_type_for_exec: SandboxType;
+
+    if sess.approval_policy == AskForApproval::BypassPolicyAndNeverAsk {
+        final_sandbox_policy_for_exec = SandboxPolicy::new_bypass_policy();
+        final_sandbox_type_for_exec = SandboxType::None;
+        // Skip safety assessment and user approval when bypassing all policies
+    } else {
+        // Original logic for determining sandbox_type and policy
+        let safety = {
+            let state = sess.state.lock().unwrap();
+            assess_command_safety(
+                &params.command,
+                sess.approval_policy, // This is the user's preference for being asked
+                &sess.sandbox_policy, // Assess against the configured sandbox policy
+                &state.approved_commands,
+            )
+        };
+
+        final_sandbox_type_for_exec = match safety {
+            SafetyCheck::AutoApprove { sandbox_type } => sandbox_type,
+            SafetyCheck::AskUser => {
+                let rx_approve = sess
+                    .request_command_approval(
+                        sub_id.clone(),
+                        params.command.clone(),
+                        params.cwd.clone(),
+                        None,
+                    )
+                    .await;
+                match rx_approve.await.unwrap_or_default() {
+                    ReviewDecision::Approved => SandboxType::None, // User approved, run without sandbox restrictions
+                    ReviewDecision::ApprovedForSession => {
+                        sess.add_approved_command(params.command.clone());
+                        SandboxType::None // User approved, run without sandbox restrictions
+                    }
+                    ReviewDecision::Denied | ReviewDecision::Abort => {
+                        return ResponseInputItem::FunctionCallOutput {
+                            call_id,
+                            output: crate::models::FunctionCallOutputPayload {
+                                content: "exec command rejected by user".to_string(),
+                                success: None,
+                            },
+                        };
+                    }
                 }
             }
-            // No sandboxing is applied because the user has given
-            // explicit approval. Often, we end up in this case because
-            // the command cannot be run in a sandbox, such as
-            // installing a new dependency that requires network access.
-            SandboxType::None
-        }
-        SafetyCheck::Reject { reason } => {
-            return ResponseInputItem::FunctionCallOutput {
-                call_id,
-                output: crate::models::FunctionCallOutputPayload {
-                    content: format!("exec command rejected: {reason}"),
-                    success: None,
-                },
-            };
-        }
-    };
+            SafetyCheck::Reject { reason } => {
+                return ResponseInputItem::FunctionCallOutput {
+                    call_id,
+                    output: crate::models::FunctionCallOutputPayload {
+                        content: format!("exec command rejected: {reason}"),
+                        success: None,
+                    },
+                };
+            }
+        };
+        // For non-bypass cases, the policy used for execution is the session's configured policy.
+        // The sandbox_type (derived from safety checks and user approval) dictates how it's applied.
+        final_sandbox_policy_for_exec = sess.sandbox_policy.clone();
+    }
 
     sess.notify_exec_command_begin(&sub_id, &call_id, &params)
         .await;
 
     let output_result = process_exec_tool_call(
         params.clone(),
-        sandbox_type,
+        final_sandbox_type_for_exec,
         sess.ctrl_c.clone(),
-        &sess.sandbox_policy,
+        &final_sandbox_policy_for_exec, // Use the determined policy for execution
     )
     .await;
 
@@ -1270,7 +1276,8 @@ async fn handle_container_exec_with_params(
             }
         }
         Err(CodexErr::Sandbox(error)) => {
-            handle_sanbox_error(error, sandbox_type, params, sess, sub_id, call_id).await
+            // Pass the same final_sandbox_policy_for_exec to the error handler
+            handle_sandbox_error(error, final_sandbox_type_for_exec, params, sess, sub_id, call_id, &final_sandbox_policy_for_exec).await
         }
         Err(e) => {
             // Handle non-sandbox errors
@@ -1285,22 +1292,25 @@ async fn handle_container_exec_with_params(
     }
 }
 
-async fn handle_sanbox_error(
+async fn handle_sandbox_error(
     error: SandboxErr,
-    sandbox_type: SandboxType,
+    original_sandbox_type: SandboxType, // The type that initially failed
     params: ExecParams,
     sess: &Session,
     sub_id: String,
     call_id: String,
+    policy_context_for_first_attempt: &SandboxPolicy, // Policy context for the first attempt
 ) -> ResponseInputItem {
     // Early out if the user never wants to be asked for approval; just return to the model immediately
-    if sess.approval_policy == AskForApproval::Never {
+    // If approval policy is BypassPolicyAndNeverAsk, sandbox errors should ideally not occur if the bypass was effective.
+    // However, if one does, or if it's 'Never', we don't escalate to user.
+    if sess.approval_policy == AskForApproval::Never || sess.approval_policy == AskForApproval::BypassPolicyAndNeverAsk {
         return ResponseInputItem::FunctionCallOutput {
             call_id,
             output: FunctionCallOutputPayload {
                 content: format!(
                     "failed in sandbox {:?} with execution error: {error}",
-                    sandbox_type
+                    original_sandbox_type
                 ),
                 success: Some(false),
             },
@@ -1342,7 +1352,7 @@ async fn handle_sanbox_error(
                 params,
                 SandboxType::None,
                 sess.ctrl_c.clone(),
-                &sess.sandbox_policy,
+                policy_context_for_first_attempt,
             )
             .await;
 

@@ -12,7 +12,7 @@ define_program() supports the following arguments:
 
 define_program(
     program="ls",
-    system_path=["/bin/ls", "/usr/bin/ls"],
+    system_path=[], # Rely on system PATH
     options=[
         flag("-1"),
         flag("-a"),
@@ -22,13 +22,43 @@ define_program(
 )
 
 define_program(
+    program="Get-ChildItem",
+    system_path=[], # Relies on PowerShell being in PATH
+    options=[
+        flag("-Recurse"),
+        flag("-Force"),
+        flag("-File"),
+        flag("-Directory"),
+        opt("-Depth", ARG_POS_INT),
+        opt("-Filter", ARG_OPAQUE_VALUE),
+        opt("-Name"), # Equivalent to ls -1
+    ],
+    args=[ARG_RFILES_OR_CWD], # Path(s) or current working directory
+)
+
+# For convenience, also allow 'dir' as an alias, though it's less common in scripts
+define_program(
+    program="dir",
+    system_path=[], # Relies on cmd.exe being in PATH or 'dir' being an alias
+    options=[], # dir has fewer scriptable options, often uses /A:D etc.
+    args=[ARG_RFILES_OR_CWD],
+)
+
+define_program(
+    program="echo",
+    system_path=[], # Relies on shell built-in or system PATH
+    options=[], # Basic echo doesn't have many standard options we need to restrict
+    args=[ARG_ANYTHING], # Allow any arguments to be echoed
+)
+
+define_program(
     program="cat",
     options=[
         flag("-b"),
         flag("-n"),
         flag("-t"),
     ],
-    system_path=["/bin/cat", "/usr/bin/cat"],
+    system_path=[], # Rely on system PATH
     args=[ARG_RFILES],
     should_match=[
         ["file.txt"],
@@ -52,7 +82,7 @@ define_program(
         flag("--recursive"),
     ],
     args=[ARG_RFILES, ARG_WFILE],
-    system_path=["/bin/cp", "/usr/bin/cp"],
+    system_path=[], # Rely on system PATH
     should_match=[
         ["foo", "bar"],
     ],
@@ -63,7 +93,7 @@ define_program(
 
 define_program(
     program="head",
-    system_path=["/bin/head", "/usr/bin/head"],
+    system_path=[], # Rely on system PATH
     options=[
         opt("-c", ARG_POS_INT),
         opt("-n", ARG_POS_INT),
@@ -71,7 +101,7 @@ define_program(
     args=[ARG_RFILES],
 )
 
-printenv_system_path = ["/usr/bin/printenv"]
+printenv_system_path = [] # Rely on system PATH
 
 # Print all environment variables.
 define_program(
@@ -162,7 +192,7 @@ common_sed_flags = [
     flag("-n"),
     flag("-u"),
 ]
-sed_system_path = ["/usr/bin/sed"]
+sed_system_path = [] # Rely on system PATH
 
 # When -e is not specified, the first argument must be a valid sed command.
 define_program(
@@ -198,5 +228,98 @@ define_program(
     should_not_match=[
         [],
     ],
-    system_path=["/bin/which", "/usr/bin/which"],
+    system_path=[], # Rely on system PATH
+)
+
+define_program(
+    program="python",
+    system_path=[], # Rely on system PATH
+    options=[],
+    args=[], # Allow any arguments
+    should_match=[
+        ["my_script.py", "arg1"],
+    ]
+)
+
+define_program(
+    program="python3",
+    system_path=[], # Rely on system PATH
+    options=[],
+    args=[], # Allow any arguments
+    should_match=[
+        ["my_script.py", "arg1"],
+    ]
+)
+
+define_program(
+    program="node",
+    system_path=[], # Rely on system PATH
+    options=[],
+    args=[], # Allow any arguments
+    should_match=[
+        ["my_script.js", "arg1"],
+    ]
+)
+
+define_program(
+    program="git",
+    system_path=[], # Rely on system PATH
+    options=[],
+    args=[], # Allow any arguments
+    should_match=[
+        ["status"],
+    ]
+)
+
+define_program(
+    program="bash",
+    system_path=[], # Rely on system PATH
+    options=[],
+    args=[], # Allow any arguments
+    should_match=[
+        ["-c", "echo hello"],
+    ]
+)
+
+define_program(
+    program="sh",
+    system_path=[], # Rely on system PATH
+    options=[],
+    args=[], # Allow any arguments
+    should_match=[
+        ["-c", "echo hello"],
+    ]
+)
+
+define_program(
+    program="dir",
+    system_path=[], # It's a shell built-in
+    options=[],
+    args=[], # Allow any arguments
+    should_match=[
+        [], # e.g., dir
+        ["/ad"], # e.g., dir /ad with options
+        ["C:\\Users"], # e.g., dir with path argument
+    ]
+)
+
+define_program(
+    program="pwsh",
+    system_path=[], # Rely on system PATH for Windows
+    options=[],
+    args=[], # Assuming empty means 'allow any arguments'
+    should_match=[
+        ["-Command", "Get-ChildItem"],
+        ["MyScript.ps1"],
+    ]
+)
+
+define_program(
+    program="powershell",
+    system_path=[], # Rely on system PATH for Windows
+    options=[],
+    args=[], # Assuming empty means 'allow any arguments'
+    should_match=[
+        ["Get-Process"],
+    ]
 )

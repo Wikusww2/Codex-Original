@@ -3,7 +3,7 @@ import type { AppConfig } from "./utils/config";
 import type { TerminalChatSession } from "./utils/session.js";
 import type { ResponseItem } from "openai/resources/responses/responses";
 
-import TerminalChat from "./components/chat/terminal-chat";
+import { TerminalChat } from "./components/chat/terminal-chat";
 import TerminalChatPastRollout from "./components/chat/terminal-chat-past-rollout";
 import { checkInGit } from "./utils/check-in-git";
 import { onExit } from "./utils/terminal";
@@ -39,7 +39,11 @@ export default function App({
   const app = useApp();
   const [accepted, setAccepted] = useState(() => false);
   const [cwd, inGitRepo] = useMemo(
-    () => [process.cwd(), checkInGit(process.cwd())],
+    () => {
+      const currentCwd = process.cwd();
+      const gitRepoStatus = checkInGit(currentCwd);
+      return [currentCwd, gitRepoStatus];
+    },
     [],
   );
   const { internal_eventEmitter } = useStdin();
@@ -98,7 +102,7 @@ export default function App({
   return (
     <TerminalChat
       config={config}
-      prompt={prompt}
+      initialPrompt={prompt}
       imagePaths={imagePaths}
       approvalPolicy={approvalPolicy}
       additionalWritableRoots={additionalWritableRoots}

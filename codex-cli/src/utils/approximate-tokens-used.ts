@@ -23,15 +23,18 @@ export function approximateTokensUsed(items: Array<ResponseItem>): number {
           continue;
         }
 
-        for (const c of item.content) {
-          if (c.type === "input_text" || c.type === "output_text") {
-            charCount += c.text.length;
-          } else if (c.type === "refusal") {
-            charCount += c.refusal.length;
-          } else if (c.type === "input_file") {
-            charCount += c.filename?.length ?? 0;
+        // Ensure item.content is an array before iterating
+        if (Array.isArray(item.content)) {
+          for (const c of item.content) {
+            if (c.type === "input_text" || c.type === "output_text") {
+              charCount += c.text.length;
+            } else if (c.type === "refusal") {
+              charCount += c.refusal.length;
+            } else if (c.type === "input_file") {
+              charCount += c.filename?.length ?? 0;
+            }
+            // images and other content types are ignored (0 chars)
           }
-          // images and other content types are ignored (0 chars)
         }
         break;
       }

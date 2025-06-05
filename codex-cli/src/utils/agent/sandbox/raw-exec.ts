@@ -3,9 +3,6 @@ import type { AppConfig } from "../../config";
 import type {
   ChildProcess,
   SpawnOptions,
-  SpawnOptionsWithStdioTuple,
-  StdioNull,
-  StdioPipe,
 } from "child_process";
 
 import { log } from "../../logger/log.js";
@@ -13,23 +10,64 @@ import { adaptCommandForPlatform } from "../platform-commands.js";
 import { createTruncatingCollector } from "./create-truncating-collector";
 import { spawn } from "child_process";
 import * as os from "os";
+import { requiresShell as utilRequiresShell } from "../exec";
+import kill from 'tree-kill';
 
 /**
  * This function should never return a rejected promise: errors should be
  * mapped to a non-zero exit code and the error message should be in stderr.
  */
 export function exec(
-  command: Array<string>,
+  originalCmd: Array<string>, // Renamed parameter
   options: SpawnOptions,
   config: AppConfig,
   abortSignal?: AbortSignal,
 ): Promise<ExecResult> {
-  // Adapt command for the current platform (e.g., convert 'ls' to 'dir' on Windows)
-  const adaptedCommand = adaptCommandForPlatform(command);
+  console.log(`[raw-exec] exec called with originalCmd: ${JSON.stringify(originalCmd)}, workdir: ${options.cwd}`); // Updated log
 
-  if (JSON.stringify(adaptedCommand) !== JSON.stringify(command)) {
+  // Adapt command for the current platform (e.g., convert 'ls' to 'dir' on Windows)
+  let adaptedCommand = adaptCommandForPlatform(originalCmd); // Updated - changed to let for mutability
+  console.log(`[raw-exec] adaptedCommand: ${JSON.stringify(adaptedCommand)}`);
+
+  // Check if this is a PowerShell command
+  const isPowerShellCommand = adaptedCommand[0]?.toLowerCase() === 'powershell' || adaptedCommand[0]?.toLowerCase() === 'pwsh';
+  
+  // Special handling for PowerShell commands with complex syntax
+  if (isPowerShellCommand && adaptedCommand.length > 1) {
+    // If we have PowerShell with -Command, ensure the rest is properly handled as a single command
+    if (adaptedCommand[1] === '-Command' || adaptedCommand[1] === '-c') {
+      if (adaptedCommand.length > 2) {
+        // Combine all remaining arguments into a single PowerShell script
+        // Get the PowerShell script and properly escape for Windows shell
+        let powershellScript = adaptedCommand.slice(2).join(' ');
+        
+        // For Windows, wrap the entire script in single quotes and escape any existing single quotes
+        if (process.platform === 'win32') {
+          // Escape single quotes by replacing ' with '' (PowerShell escaping) and wrap in single quotes
+          powershellScript = powershellScript.replace(/'/g, "''")
+          // For logging purposes only
+          console.log(`[raw-exec] Original PowerShell script: ${powershellScript}`);
+        }
+        // Replace the original arguments with a properly escaped single command
+        const shellCommand = adaptedCommand[0] || 'powershell';
+        adaptedCommand = [shellCommand, '-Command', powershellScript];
+        console.log(`[raw-exec] Reformatted PowerShell command: ${JSON.stringify(adaptedCommand)}`);
+
+        // For logging purposes only
+        if (process.platform === 'win32') {
+          console.log(`[raw-exec] PowerShell command to execute directly in PowerShell: ${powershellScript}`);
+        }
+      }
+    }
+  }
+  
+  // Either use the requiresShell function or force shell for PowerShell commands
+  const needsShell = isPowerShellCommand || utilRequiresShell(adaptedCommand);
+  console.log(`[raw-exec] utilRequiresShell for adaptedCommand returned: ${needsShell} (isPowerShellCommand: ${isPowerShellCommand})`);
+
+  if (JSON.stringify(adaptedCommand) !== JSON.stringify(originalCmd)) { // Updated
     log(
-      `Command adapted for platform: ${command.join(
+      `Command adapted for platform: ${originalCmd.join( // Updated
         " ",
       )} -> ${adaptedCommand.join(" ")}`,
     );
@@ -68,23 +106,19 @@ export function exec(
   // Even if you pass `{stdio: ["ignore", "pipe", "pipe"] }` to execFile(), the
   // hang still happens as the `stdio` is seemingly ignored. Using spawn()
   // works around this issue.
-  const fullOptions: SpawnOptionsWithStdioTuple<
-    StdioNull,
-    StdioPipe,
-    StdioPipe
-  > = {
-    ...options,
-    // Inherit any caller‑supplied stdio flags but force stdin to "ignore" so
-    // the child never attempts to read from us (see lengthy comment above).
-    stdio: ["ignore", "pipe", "pipe"],
-    // Launch the child in its *own* process group so that we can later send a
-    // single signal to the entire group – this reliably terminates not only
-    // the immediate child but also any grandchildren it might have spawned
-    // (think `bash -c "sleep 999"`).
-    detached: true,
-  };
 
-  const child: ChildProcess = spawn(prog, adaptedCommand.slice(1), fullOptions);
+  // Construct spawn options
+  const spawnOptionsForExec: SpawnOptions = {
+    ...options, // Contains cwd, timeout from caller (e.g., handle-exec-command.ts)
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"], // Force stdin to "ignore", pipe stdout/stderr
+    detached: true, // Launch in its own process group for reliable termination
+    ...(needsShell ? { shell: true } : {}), // Conditionally add shell option
+  };
+  console.log(`[raw-exec] Calculated spawnOptionsForExec: ${JSON.stringify(spawnOptionsForExec)}`);
+  console.log(`[raw-exec] Spawning: executable='${prog}', args=${JSON.stringify(adaptedCommand.slice(1))}`);
+
+  const child: ChildProcess = spawn(prog, adaptedCommand.slice(1), spawnOptionsForExec);
   // If an AbortSignal is provided, ensure the spawned process is terminated
   // when the signal is triggered so that cancellations propagate down to any
   // long‑running child processes. We default to SIGTERM to give the process a
@@ -94,33 +128,33 @@ export function exec(
     const abortHandler = () => {
       log(`raw-exec: abort signal received – killing child ${child.pid}`);
       const killTarget = (signal: NodeJS.Signals) => {
-        if (!child.pid) {
-          return;
-        }
-        try {
-          try {
-            // Send to the *process group* so grandchildren are included.
-            process.kill(-child.pid, signal);
-          } catch {
-            // Fallback: kill only the immediate child (may leave orphans on
-            // exotic kernels that lack process‑group semantics, but better
-            // than nothing).
-            try {
-              child.kill(signal);
-            } catch {
-              /* ignore */
+        if (child.pid) {
+          kill(child.pid, signal, (err) => {
+            if (err) {
+              log(`Error attempting to tree-kill process ${child.pid} with signal ${signal}: ${err.message}`);
+              // Fallback or further error handling if tree-kill fails
+              try {
+                if (child.pid && !child.killed) { // Check if still exists and not killed
+                    process.kill(child.pid, signal); // Try direct kill as a last resort
+                }
+              } catch (e2) {
+                log(`Fallback process.kill for ${child.pid} also failed: ${(e2 as Error).message}`);
+              }
+            } else {
+              log(`Successfully sent ${signal} to process tree ${child.pid}`);
             }
-          }
-        } catch {
-          /* already gone */
+          });
         }
       };
 
       // First try graceful termination.
+      console.log('Attempting to terminate child process with SIGTERM');
       killTarget("SIGTERM");
 
       // Escalate to SIGKILL if the group refuses to die.
+      console.log('Waiting for 2 seconds before sending SIGKILL');
       setTimeout(() => {
+        console.log('Sending SIGKILL to child process');
         if (!child.killed) {
           killTarget("SIGKILL");
         }

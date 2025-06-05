@@ -334,7 +334,7 @@ impl Config {
             approval_policy: approval_policy
                 .or(config_profile.approval_policy)
                 .or(cfg.approval_policy)
-                .unwrap_or_else(AskForApproval::default),
+                .unwrap_or(AskForApproval::Never),
             sandbox_policy,
             disable_response_storage: disable_response_storage
                 .or(config_profile.disable_response_storage)

@@ -12,7 +12,7 @@ import React, { useMemo } from "react";
 // A batch entry can either be a standalone response item or a grouped set of
 // items (e.g. auto‑approved tool‑call batches) that should be rendered
 // together.
-type BatchEntry = { item?: ResponseItem; group?: GroupedResponseItem };
+export type BatchEntry = { item?: ResponseItem; group?: GroupedResponseItem };
 type TerminalMessageHistoryProps = {
   batch: Array<BatchEntry>;
   groupCounts: Record<string, number>;
@@ -20,11 +20,11 @@ type TerminalMessageHistoryProps = {
   userMsgCount: number;
   confirmationPrompt: React.ReactNode;
   loading: boolean;
-  thinkingSeconds: number;
   headerProps: TerminalHeaderProps;
   fullStdout: boolean;
   setOverlayMode: React.Dispatch<React.SetStateAction<OverlayModeType>>;
   fileOpener: FileOpenerScheme | undefined;
+  workdir?: string;
 };
 
 const TerminalMessageHistory: React.FC<TerminalMessageHistoryProps> = ({
@@ -32,10 +32,10 @@ const TerminalMessageHistory: React.FC<TerminalMessageHistoryProps> = ({
   headerProps,
   // `loading` and `thinkingSeconds` handled by input component now.
   loading: _loading,
-  thinkingSeconds: _thinkingSeconds,
   fullStdout,
   setOverlayMode,
   fileOpener,
+  workdir,
 }) => {
   // Flatten batch entries to response items.
   const messages = useMemo(() => batch.map(({ item }) => item!), [batch]);
@@ -47,7 +47,7 @@ const TerminalMessageHistory: React.FC<TerminalMessageHistoryProps> = ({
       <Static items={["header", ...messages]}>
         {(item, index) => {
           if (item === "header") {
-            return <TerminalHeader key="header" {...headerProps} />;
+            return <TerminalHeader key="header" {...headerProps} workdir={workdir} />;
           }
 
           // After the guard above, item is a ResponseItem
@@ -61,6 +61,7 @@ const TerminalMessageHistory: React.FC<TerminalMessageHistoryProps> = ({
             <Box
               key={`${message.id}-${index}`}
               flexDirection="column"
+              width="100%"
               marginLeft={
                 message.type === "message" &&
                 (message.role === "user" || message.role === "assistant")

@@ -130,7 +130,7 @@ export function calculateContextPercentRemaining(
  * For the purposes of de‑duplication we only care about *user* messages so we
  * detect those here in a single, reusable helper.
  */
-function isUserMessage(
+export function isUserMessage(
   item: ResponseItem,
 ): item is ResponseItem & { type: "message"; role: "user"; content: unknown } {
   return item.type === "message" && (item as { role?: string }).role === "user";

@@ -5,7 +5,11 @@ import { quote } from "shell-quote";
  * this to doing `args.join(" ")` as this will handle quoting and escaping
  * correctly. See unit test for details.
  */
-export function formatCommandForDisplay(command: Array<string>): string {
+export function formatCommandForDisplay(command: Array<string> | undefined): string {
+  // Guard against undefined or null command arrays
+  if (!command) {
+    return "";
+  }
   // The model often wraps arbitrary shell commands in an invocation that looks
   // like:
   //
@@ -29,6 +33,7 @@ export function formatCommandForDisplay(command: Array<string>): string {
 
   try {
     if (
+      Array.isArray(command) &&
       command.length === 3 &&
       command[0] === "bash" &&
       command[1] === "-lc" &&
@@ -48,6 +53,7 @@ export function formatCommandForDisplay(command: Array<string>): string {
 
     return quote(command);
   } catch (err) {
-    return command.join(" ");
+    // If quote fails, fall back to simple join with added safety
+    return Array.isArray(command) ? command.join(" ") : String(command);
   }
 }

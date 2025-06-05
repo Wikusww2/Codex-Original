@@ -16,16 +16,30 @@ export function parseToolCallOutput(toolCallOutput: string): {
   metadata: ExecOutputMetadata;
 } {
   try {
-    const { output, metadata } = JSON.parse(toolCallOutput);
+    // Attempt to parse as JSON, assuming structured output from a tool
+    const parsed = JSON.parse(toolCallOutput);
+
+    // Check if the parsed object has the expected 'output' and 'metadata' fields
+    // This handles cases where toolCallOutput might be a JSON string but not of the expected structure.
+    if (typeof parsed === 'object' && parsed !== null && 'output' in parsed && 'metadata' in parsed) {
+      return {
+        output: parsed.output as string, // Assuming parsed.output is a string
+        metadata: parsed.metadata as ExecOutputMetadata, // Assuming parsed.metadata conforms to ExecOutputMetadata
+      };
+    }
+    // If parsed into JSON but not the expected structure, treat the original string as plain text output.
+    // This could happen if a tool returns a simple JSON string like ""hello"" or a JSON array.
     return {
-      output,
-      metadata,
+      output: toolCallOutput, // Fallback to original string if structure is not as expected
+      metadata: { exit_code: 0, duration_seconds: 0 }, // Default metadata for plain text
     };
   } catch (err) {
+    // If JSON.parse fails, assume toolCallOutput was plain text all along.
     return {
-      output: `Failed to parse JSON result`,
+      output: toolCallOutput, // Return the original string as output
       metadata: {
-        exit_code: 1,
+        // Provide default/minimal metadata for plain text output
+        exit_code: 0, // Assuming success if it's plain text output not indicating an error
         duration_seconds: 0,
       },
     };

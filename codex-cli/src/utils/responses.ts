@@ -2,6 +2,8 @@ import type { OpenAI } from "openai";
 import type {
   ResponseCreateParams,
   Response,
+  Tool,
+  FunctionTool,
 } from "openai/resources/responses/responses";
 
 // Define interfaces based on OpenAI API documentation
@@ -217,6 +219,8 @@ function convertInputItemToMessage(
 function getFullMessages(
   input: ResponseCreateInput,
 ): Array<OpenAI.Chat.Completions.ChatCompletionMessageParam> {
+  console.log(`[responses.ts] getFullMessages input.input: ${JSON.stringify(input.input, null, 2)}`);
+
   let baseHistory: Array<OpenAI.Chat.Completions.ChatCompletionMessageParam> =
     [];
   if (input.previous_response_id) {
@@ -249,19 +253,26 @@ function getFullMessages(
 function convertTools(
   tools?: ResponseCreateInput["tools"],
 ): Array<OpenAI.Chat.Completions.ChatCompletionTool> | undefined {
+  if (!tools) {
+    return undefined;
+  }
+
   return tools
-    ?.filter((tool) => tool.type === "function")
-    .map((tool) => ({
+    .filter((tool: Tool): tool is FunctionTool => tool.type === "function")
+    .map((tool: FunctionTool) => ({
       type: "function" as const,
       function: {
         name: tool.name,
         description: tool.description || undefined,
-        parameters: tool.parameters,
+        parameters: tool.parameters === null || tool.parameters === undefined 
+                      ? undefined 
+                      : tool.parameters as OpenAI.FunctionParameters,
       },
     }));
 }
 
 const createCompletion = (openai: OpenAI, input: ResponseCreateInput) => {
+  console.log(`[responses.ts] createCompletion called with input: ${JSON.stringify(input.model, null, 2)}`); // Log model for brevity
   const fullMessages = getFullMessages(input);
   const chatTools = convertTools(input.tools);
   const webSearchOptions = input.tools?.some(
@@ -285,6 +296,7 @@ const createCompletion = (openai: OpenAI, input: ResponseCreateInput) => {
     metadata: input.metadata,
   };
 
+  console.log('[responses.ts] About to call openai.chat.completions.create. Current function source:', openai.chat.completions.create.toString());
   return openai.chat.completions.create(chatInput);
 };
 
@@ -301,6 +313,7 @@ async function responsesCreateViaChatCompletions(
   openai: OpenAI,
   input: ResponseCreateInput,
 ): Promise<ResponseOutput | AsyncGenerator<ResponseEvent>> {
+  console.log(`[responses.ts] responsesCreateViaChatCompletions called with model: ${JSON.stringify(input.model, null, 2)}`); // Log model for brevity
   const completion = await createCompletion(openai, input);
   if (input.stream) {
     return streamResponses(

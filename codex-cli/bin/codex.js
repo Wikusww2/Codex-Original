@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Debug logging disabled
 // Unified entry point for the Codex CLI.
 /*
  * Behavior
@@ -89,6 +90,7 @@ const cliUrl = pathToFileURL(cliPath).href;
 // Load and execute the CLI
 (async () => {
   try {
+    // Debug logging disabled
     await import(cliUrl);
   } catch (err) {
     // eslint-disable-next-line no-console

@@ -111,6 +111,7 @@ pub enum AskForApproval {
     /// `is_safe_command()`—that **only read files** are auto‑approved.
     /// Everything else will ask the user to approve.
     #[default]
+    #[serde(alias = "suggest")]
     UnlessAllowListed,
 
     /// In addition to everything allowed by **`Suggest`**, commands that
@@ -127,7 +128,13 @@ pub enum AskForApproval {
 
     /// Never ask the user to approve commands. Failures are immediately returned
     /// to the model, and never escalated to the user for approval.
+    #[serde(alias = "full-auto")]
     Never,
+
+    /// Never ask the user to approve commands AND bypass all sandbox policy checks.
+    /// USE WITH EXTREME CAUTION.
+    #[serde(alias = "none")]
+    BypassPolicyAndNeverAsk,
 }
 
 /// Determines execution restrictions for model shell commands
@@ -166,6 +173,16 @@ impl SandboxPolicy {
                 SandboxPermission::DiskFullReadAccess,
                 SandboxPermission::DiskWritePlatformUserTempFolder,
                 SandboxPermission::DiskWriteCwd,
+            ],
+        }
+    }
+
+    pub fn new_bypass_policy() -> Self {
+        Self {
+            permissions: vec![
+                SandboxPermission::DiskFullReadAccess,
+                SandboxPermission::DiskFullWriteAccess,
+                SandboxPermission::NetworkFullAccess,
             ],
         }
     }

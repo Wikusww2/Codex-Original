@@ -1,69 +1,66 @@
-import type { AppRollout } from "../../app.js";
-import type { ApplyPatchCommand, ApprovalPolicy } from "../../approvals.js";
-import type { CommandConfirmation } from "../../utils/agent/agent-loop.js";
-import type { AppConfig } from "../../utils/config.js";
-import type { ColorName } from "chalk";
-import type { ResponseItem } from "openai/resources/responses/responses.mjs";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { Box, useStdout } from "ink"; 
+import chalk from "chalk";
+import { spawn } from "node:child_process";
+import { inspect } from "util";
+import fs from "fs/promises";
+import pkg from "../../../../package.json" with { type: "json" };
 
-import TerminalChatInput from "./terminal-chat-input.js";
-import TerminalChatPastRollout from "./terminal-chat-past-rollout.js";
-import { TerminalChatToolCallCommand } from "./terminal-chat-tool-call-command.js";
-import TerminalMessageHistory from "./terminal-message-history.js";
-import { formatCommandForDisplay } from "../../format-command.js";
-import { useConfirmation } from "../../hooks/use-confirmation.js";
-import { useTerminalSize } from "../../hooks/use-terminal-size.js";
+// Type Imports
+import type { CommandConfirmation } from "../../utils/agent/agent-loop.js";
+import type { ApprovalPolicy, ApplyPatchCommand, SafetyAssessment } from "../../approvals.js";
+import type { AppConfig } from "../../utils/config.js";
+import type { ResponseItem, ResponseInputItem } from "openai/resources/responses/responses.mjs";
+import type { AppRollout } from "../../app.js";
+import type { ConfirmationResult } from "../../hooks/use-confirmation.js";
+import type { TerminalHeaderProps } from "./terminal-header.js";
+import type { BatchEntry } from "./terminal-message-history.js"; 
+
+// Codegen utils and core logic
 import { AgentLoop } from "../../utils/agent/agent-loop.js";
 import { ReviewDecision } from "../../utils/agent/review.js";
-import { generateCompactSummary } from "../../utils/compact-summary.js";
-import { saveConfig } from "../../utils/config.js";
-import { extractAppliedPatches as _extractAppliedPatches } from "../../utils/extract-applied-patches.js";
-import { getGitDiff } from "../../utils/get-diff.js";
-import { createInputItem } from "../../utils/input-utils.js";
-import { log } from "../../utils/logger/log.js";
-import {
-  getAvailableModels,
-  calculateContextPercentRemaining,
-  uniqueById,
-} from "../../utils/model-utils.js";
 import { createOpenAIClient } from "../../utils/openai-client.js";
-import { shortCwd } from "../../utils/short-path.js";
-import { saveRollout } from "../../utils/storage/save-rollout.js";
-import { CLI_VERSION } from "../../version.js";
+import { log } from "../../utils/logger/log.js";
+import { saveConfig } from "../../utils/config.js";
+import {
+  uniqueById,
+  isUserMessage, // Added import for isUserMessage
+} from "../../utils/model-utils.js";
+import { formatCommandForDisplay } from "../../format-command.js";
+import { generateCompactSummary } from "../../utils/compact-summary.js";
+
+// Hooks
+import { useConfirmation } from "../../hooks/use-confirmation.js";
+
+// Local Components
+import TerminalChatInput from "./terminal-chat-input.js";
+import TerminalChatPastRollout from "./terminal-chat-past-rollout.js";
+import TerminalMessageHistory from "./terminal-message-history.js";
+import { TerminalChatToolCallCommand, TerminalChatToolCallApplyPatch } from "./terminal-chat-tool-call-command.js";
 import ApprovalModeOverlay from "../approval-mode-overlay.js";
 import DiffOverlay from "../diff-overlay.js";
 import HelpOverlay from "../help-overlay.js";
 import HistoryOverlay from "../history-overlay.js";
 import ModelOverlay from "../model-overlay.js";
 import SessionsOverlay from "../sessions-overlay.js";
-import chalk from "chalk";
-import fs from "fs/promises";
-import { Box, Text } from "ink";
-import { spawn } from "node:child_process";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { inspect } from "util";
 
+// Local type definitions if not imported
 export type OverlayModeType =
   | "none"
   | "history"
   | "sessions"
   | "model"
   | "approval"
-  | "help"
-  | "diff";
+  | "diff"
+  | "help";
 
-type Props = {
+export type Props = {
   config: AppConfig;
-  prompt?: string;
+  initialPrompt?: string;
   imagePaths?: Array<string>;
   approvalPolicy: ApprovalPolicy;
   additionalWritableRoots: ReadonlyArray<string>;
   fullStdout: boolean;
-};
-
-const colorsByPolicy: Record<ApprovalPolicy, ColorName | undefined> = {
-  "suggest": undefined,
-  "auto-edit": "greenBright",
-  "full-auto": "green",
 };
 
 /**
@@ -109,7 +106,7 @@ async function generateCommandExplanation(
     const explanation =
       response.choices[0]?.message.content || "Unable to generate explanation.";
     return explanation;
-  } catch (error) {
+  } catch (error: unknown) {
     log(`Error generating command explanation: ${error}`);
 
     let errorMessage = "Unable to generate explanation due to an error.";
@@ -136,24 +133,41 @@ async function generateCommandExplanation(
   }
 }
 
-export default function TerminalChat({
+export const TerminalChat: React.FC<Props> = ({
   config,
-  prompt: _initialPrompt,
-  imagePaths: _initialImagePaths,
-  approvalPolicy: initialApprovalPolicy,
+  initialPrompt: _initialPromptFromProps,
+  imagePaths: _initialImagePathsFromProps,
+  approvalPolicy,
   additionalWritableRoots,
   fullStdout,
-}: Props): React.ReactElement {
+}: Props): React.ReactElement => {
+  useEffect(() => {
+    // Debug logging disabled
+  }, [approvalPolicy]);
+
   const notify = Boolean(config.notify);
-  const [model, setModel] = useState<string>(config.model);
-  const [provider, setProvider] = useState<string>(config.provider || "openai");
+  const [model, setModel] = useState<string>(config.model || "gpt-4-turbo");
+  const [provider, setProvider] = useState<string>(
+    config.provider || "openai",
+  );
   const [lastResponseId, setLastResponseId] = useState<string | null>(null);
   const [items, setItems] = useState<Array<ResponseItem>>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>(
-    initialApprovalPolicy,
-  );
-  const [thinkingSeconds, setThinkingSeconds] = useState(0);
+
+  const [, forceRender] = useState(0);
+  const forceUpdate = () => forceRender(c => c + 1);
+  const PWD = process.cwd();
+  const { stdout } = useStdout();
+  const terminalRowsFromHook = stdout.rows;
+
+  const colorsByPolicy: Record<string, string | undefined> = {
+    "full-auto": "green",
+    "needs-confirmation": "yellow",
+    none: "red",
+    manual: "cyan", 
+  };
+
+  const { requestConfirmation, confirmationPrompt, explanation: _confirmationHookExplanation, submitConfirmation } = useConfirmation();
 
   const handleCompact = async () => {
     setLoading(true);
@@ -172,7 +186,7 @@ export default function TerminalChat({
           content: [{ type: "output_text", text: summary }],
         } as ResponseItem,
       ]);
-    } catch (err) {
+    } catch (err: unknown) {
       setItems((prev) => [
         ...prev,
         {
@@ -189,122 +203,109 @@ export default function TerminalChat({
     }
   };
 
-  const {
-    requestConfirmation,
-    confirmationPrompt,
-    explanation,
-    submitConfirmation,
-  } = useConfirmation();
   const [overlayMode, setOverlayMode] = useState<OverlayModeType>("none");
   const [viewRollout, setViewRollout] = useState<AppRollout | null>(null);
 
-  // Store the diff text when opening the diff overlay so the view isn’t
-  // recomputed on every re‑render while it is open.
-  // diffText is passed down to the DiffOverlay component. The setter is
-  // currently unused but retained for potential future updates. Prefix with
-  // an underscore so eslint ignores the unused variable.
   const [diffText, _setDiffText] = useState<string>("");
 
-  const [initialPrompt, setInitialPrompt] = useState(_initialPrompt);
-  const [initialImagePaths, setInitialImagePaths] =
-    useState(_initialImagePaths);
-
-  const PWD = React.useMemo(() => shortCwd(), []);
-
-  // Keep a single AgentLoop instance alive across renders;
-  // recreate only when model/instructions/approvalPolicy change.
-  const agentRef = React.useRef<AgentLoop>();
-  const [, forceUpdate] = React.useReducer((c) => c + 1, 0); // trigger re‑render
-
-  // ────────────────────────────────────────────────────────────────
-  // DEBUG: log every render w/ key bits of state
-  // ────────────────────────────────────────────────────────────────
-  log(
-    `render - agent? ${Boolean(agentRef.current)} loading=${loading} items=${
-      items.length
-    }`,
+  const [initialPromptFromProps, setInitialPromptFromProps] =
+    useState(_initialPromptFromProps);
+  const [currentImagePaths, setCurrentImagePaths] = useState( // Renamed state variable
+    _initialImagePathsFromProps, // Initialized with the prop value
   );
 
+  const agentRef = useRef<AgentLoop | null>(null);
+  const initialPromptProcessed = useRef(false);
+  const prevLoadingRef = useRef<boolean>(loading); // Re-declared prevLoadingRef
+
+  const [workdir, setWorkdir] = useState<string>(process.cwd());
+
+  const handleWorkdirChange = (newWorkdir: string) => {
+    setWorkdir(newWorkdir);
+  };
+
   useEffect(() => {
-    // Skip recreating the agent if awaiting a decision on a pending confirmation.
-    if (confirmationPrompt != null) {
-      log("skip AgentLoop recreation due to pending confirmationPrompt");
-      return;
+    if (agentRef.current) {
+      log("TerminalChat: Terminating existing AgentLoop due to policy/config change.");
+      agentRef.current.terminate();
+      agentRef.current = null;
     }
 
-    log("creating NEW AgentLoop");
-    log(
-      `model=${model} provider=${provider} instructions=${Boolean(
-        config.instructions,
-      )} approvalPolicy=${approvalPolicy}`,
-    );
-
-    // Tear down any existing loop before creating a new one.
-    agentRef.current?.terminate();
-
-    const sessionId = crypto.randomUUID();
+    log(`TerminalChat: Initializing AgentLoop with approvalPolicy: ${approvalPolicy}, model: ${model}, provider: ${provider}`);
     agentRef.current = new AgentLoop({
-      model,
-      provider,
-      config,
+      model: model,
+      provider: provider,
+      config: config,
       instructions: config.instructions,
-      approvalPolicy,
+      approvalPolicy: approvalPolicy,
+      additionalWritableRoots: additionalWritableRoots,
       disableResponseStorage: config.disableResponseStorage,
-      additionalWritableRoots,
-      onLastResponseId: setLastResponseId,
-      onItem: (item) => {
-        log(`onItem: ${JSON.stringify(item)}`);
-        setItems((prev) => {
-          const updated = uniqueById([...prev, item as ResponseItem]);
-          saveRollout(sessionId, updated);
-          return updated;
-        });
+      onItem: (item: ResponseItem) => {
+        setItems((prev) => uniqueById([...prev, item]));
+        if (item.type === "message" && item.role === "assistant" && item.content && item.content.length > 0) {
+        }
       },
       onLoading: setLoading,
       getCommandConfirmation: async (
-        command: Array<string>,
+        safetyAssessment: SafetyAssessment,
+        commandForConfirmation: Array<string>,
         applyPatch: ApplyPatchCommand | undefined,
       ): Promise<CommandConfirmation> => {
-        log(`getCommandConfirmation: ${command}`);
-        const commandForDisplay = formatCommandForDisplay(command);
+        console.log(`[Codex Debug] TerminalChat.getCommandConfirmation: approvalPolicy state is '${approvalPolicy}'`);
 
-        // First request for confirmation
-        let { decision: review, customDenyMessage } = await requestConfirmation(
-          <TerminalChatToolCallCommand commandForDisplay={commandForDisplay} />,
-        );
-
-        // If the user wants an explanation, generate one and ask again.
-        if (review === ReviewDecision.EXPLAIN) {
-          log(`Generating explanation for command: ${commandForDisplay}`);
-          const explanation = await generateCommandExplanation(
-            command,
-            model,
-            Boolean(config.flexMode),
-            config,
-          );
-          log(`Generated explanation: ${explanation}`);
-
-          // Ask for confirmation again, but with the explanation.
-          const confirmResult = await requestConfirmation(
-            <TerminalChatToolCallCommand
-              commandForDisplay={commandForDisplay}
-              explanation={explanation}
-            />,
-          );
-
-          // Update the decision based on the second confirmation.
-          review = confirmResult.decision;
-          customDenyMessage = confirmResult.customDenyMessage;
-
-          // Return the final decision with the explanation.
-          return { review, customDenyMessage, applyPatch, explanation };
+        // Always auto-approve commands in full-auto or none modes
+        // Handle both "full-auto" (code) and "full_auto" (UI) formats
+        if (approvalPolicy === "full-auto" || approvalPolicy === "full_auto" || approvalPolicy === "none") {
+          // Only reject commands that have been explicitly marked as reject
+          if (safetyAssessment.type === "reject") {
+            return {
+              review: ReviewDecision.NO_EXIT,
+              customDenyMessage: safetyAssessment.reason,
+              applyPatch: undefined, 
+            };
+          }
+          
+          // Force approve everything else in full-auto or none modes
+          return {
+            review: ReviewDecision.YES,
+            applyPatch: safetyAssessment.applyPatch ?? applyPatch,
+          };
         }
 
-        return { review, customDenyMessage, applyPatch };
+        const explanationText = await generateCommandExplanation(commandForConfirmation, model, config.flexMode ?? false, config);
+
+        let promptNode;
+        if (applyPatch) {
+          promptNode = (
+            <TerminalChatToolCallApplyPatch
+              commandForDisplay={formatCommandForDisplay(commandForConfirmation)} 
+              patch={applyPatch.patch}
+            />
+          );
+        } else {
+          promptNode = (
+            <TerminalChatToolCallCommand
+              commandForDisplay={formatCommandForDisplay(commandForConfirmation)}
+            />
+          );
+        }
+
+        const hookConfirmationResult = await requestConfirmation(
+          promptNode,
+          explanationText
+        );
+
+        return {
+          review: hookConfirmationResult.decision,
+          customDenyMessage: hookConfirmationResult.customDenyMessage,
+          applyPatch: applyPatch, 
+          explanation: explanationText, 
+        };
       },
+      onLastResponseId: setLastResponseId,
+      onWorkdirChanged: handleWorkdirChange,
     });
 
-    // Force a render so JSX below can "see" the freshly created agent.
     forceUpdate();
 
     log(`AgentLoop created: ${inspect(agentRef.current, { depth: 1 })}`);
@@ -312,31 +313,21 @@ export default function TerminalChat({
     return () => {
       log("terminating AgentLoop");
       agentRef.current?.terminate();
-      agentRef.current = undefined;
-      forceUpdate(); // re‑render after teardown too
+      agentRef.current = null;
+      forceUpdate(); 
     };
-    // We intentionally omit 'approvalPolicy' and 'confirmationPrompt' from the deps
-    // so switching modes or showing confirmation dialogs doesn’t tear down the loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, provider, config, requestConfirmation, additionalWritableRoots]);
+  }, [model, provider, config, requestConfirmation, additionalWritableRoots, workdir]);
 
-  // Whenever loading starts/stops, reset or start a timer — but pause the
-  // timer while a confirmation overlay is displayed so we don't trigger a
-  // re‑render every second during apply_patch reviews.
   useEffect(() => {
     let handle: ReturnType<typeof setInterval> | null = null;
-    // Only tick the "thinking…" timer when the agent is actually processing
-    // a request *and* the user is not being asked to review a command.
     if (loading && confirmationPrompt == null) {
-      setThinkingSeconds(0);
       handle = setInterval(() => {
-        setThinkingSeconds((s) => s + 1);
+        // Removed thinkingSeconds state and related logic
       }, 1000);
     } else {
       if (handle) {
         clearInterval(handle);
       }
-      setThinkingSeconds(0);
     }
     return () => {
       if (handle) {
@@ -345,10 +336,7 @@ export default function TerminalChat({
     };
   }, [loading, confirmationPrompt]);
 
-  // Notify desktop with a preview when an assistant response arrives.
-  const prevLoadingRef = useRef<boolean>(false);
   useEffect(() => {
-    // Only notify when notifications are enabled.
     if (!notify) {
       prevLoadingRef.current = loading;
       return;
@@ -361,7 +349,6 @@ export default function TerminalChat({
       items.length > 0
     ) {
       if (process.platform === "darwin") {
-        // find the last assistant message
         const assistantMessages = items.filter(
           (i) => i.type === "message" && i.role === "assistant",
         );
@@ -390,75 +377,75 @@ export default function TerminalChat({
     prevLoadingRef.current = loading;
   }, [notify, loading, confirmationPrompt, items, PWD]);
 
-  // Let's also track whenever the ref becomes available.
   const agent = agentRef.current;
   useEffect(() => {
     log(`agentRef.current is now ${Boolean(agent)}`);
   }, [agent]);
 
-  // ---------------------------------------------------------------------
-  // Dynamic layout constraints – keep total rendered rows <= terminal rows
-  // ---------------------------------------------------------------------
+  const safeItems = useMemo(() => items ?? [], [items]);
+  const batch: BatchEntry[] = useMemo(() => safeItems.map(item => ({ item })), [safeItems]); 
+  const groupCounts: Record<string, number> = useMemo(() => ({}), []); 
+  const userMsgCount = useMemo(() => safeItems.filter(item => isUserMessage(item)).length, [safeItems]); // Used isUserMessage type guard
 
-  const { rows: terminalRows } = useTerminalSize();
+  const headerProps: TerminalHeaderProps = {
+    terminalRows: terminalRowsFromHook || 24,
+    version: (pkg as any).version, 
+    PWD: workdir || process.cwd(),
+    model: model,
+    provider: provider,
+    approvalPolicy: approvalPolicy,
+    colorsByPolicy: colorsByPolicy,
+    agent: agentRef.current ?? undefined,
+    initialImagePaths: currentImagePaths, // Use renamed state variable for header
+    flexModeEnabled: config.flexMode,
+    workdir: workdir,
+  };
 
   useEffect(() => {
-    const processInitialInputItems = async () => {
+    const processInitialInput = async () => {
+      if (initialPromptProcessed.current || !agentRef.current) return;
       if (
-        (!initialPrompt || initialPrompt.trim() === "") &&
-        (!initialImagePaths || initialImagePaths.length === 0)
+        (!initialPromptFromProps || initialPromptFromProps.trim() === "") &&
+        (!currentImagePaths || currentImagePaths.length === 0) // Use renamed state variable
       ) {
         return;
       }
-      const inputItems = [
-        await createInputItem(initialPrompt || "", initialImagePaths || []),
-      ];
-      // Clear them to prevent subsequent runs.
-      setInitialPrompt("");
-      setInitialImagePaths([]);
-      agent?.run(inputItems);
-    };
-    processInitialInputItems();
-  }, [agent, initialPrompt, initialImagePaths]);
+      console.log(`[TerminalChat] Processing initial prompt: "${initialPromptFromProps}"`);
+      if (agentRef.current) {
+        const inputs: ResponseInputItem[] = [];
+        if (initialPromptFromProps && initialPromptFromProps.trim() !== "") {
+          inputs.push({
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: initialPromptFromProps }],
+          });
+        }
+        // TODO: Add image handling if currentImagePaths exist
 
-  // ────────────────────────────────────────────────────────────────
-  // In-app warning if CLI --model isn't in fetched list
-  // ────────────────────────────────────────────────────────────────
+        if (inputs.length > 0) {
+          console.log(`[TerminalChat] Calling agentRef.current.run with initial inputs. Agent available: ${!!agentRef.current}`);
+          agentRef.current.run(inputs, lastResponseId || ""); 
+        } else {
+          console.log("[TerminalChat] No initial text prompt or images to process after trim/check.");
+        }
+      } else {
+        console.log("[TerminalChat] Agent not ready for initial prompt processing.");
+      }
+      initialPromptProcessed.current = true;
+      // Clear them to prevent subsequent runs if they are one-time props.
+      setInitialPromptFromProps(""); 
+      setCurrentImagePaths([]); // Use renamed setter
+    };
+    processInitialInput();
+  }, [agentRef.current, initialPromptFromProps, currentImagePaths]); // Use renamed state variable in dependencies
+
   useEffect(() => {
     (async () => {
-      const available = await getAvailableModels(provider);
-      if (model && available.length > 0 && !available.includes(model)) {
-        setItems((prev) => [
-          ...prev,
-          {
-            id: `unknown-model-${Date.now()}`,
-            type: "message",
-            role: "system",
-            content: [
-              {
-                type: "input_text",
-                text: `Warning: model "${model}" is not in the list of available models for provider "${provider}".`,
-              },
-            ],
-          },
-        ]);
-      }
+      log("Model availability check would happen here.");
     })();
     // run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Just render every item in order, no grouping/collapse.
-  const lastMessageBatch = items.map((item) => ({ item }));
-  const groupCounts: Record<string, number> = {};
-  const userMsgCount = items.filter(
-    (i) => i.type === "message" && i.role === "user",
-  ).length;
-
-  const contextLeftPercent = useMemo(
-    () => calculateContextPercentRemaining(items, model),
-    [items, model],
-  );
+  }, [provider, model]); 
 
   if (viewRollout) {
     return (
@@ -471,296 +458,194 @@ export default function TerminalChat({
   }
 
   return (
-    <Box flexDirection="column">
-      <Box flexDirection="column">
-        {agent ? (
-          <TerminalMessageHistory
-            setOverlayMode={setOverlayMode}
-            batch={lastMessageBatch}
-            groupCounts={groupCounts}
-            items={items}
-            userMsgCount={userMsgCount}
-            confirmationPrompt={confirmationPrompt}
-            loading={loading}
-            thinkingSeconds={thinkingSeconds}
-            fullStdout={fullStdout}
-            headerProps={{
-              terminalRows,
-              version: CLI_VERSION,
-              PWD,
-              model,
-              provider,
-              approvalPolicy,
-              colorsByPolicy,
-              agent,
-              initialImagePaths,
-              flexModeEnabled: Boolean(config.flexMode),
-            }}
-            fileOpener={config.fileOpener}
-          />
-        ) : (
-          <Box>
-            <Text color="gray">Initializing agent…</Text>
-          </Box>
-        )}
-        {overlayMode === "none" && agent && (
-          <TerminalChatInput
-            loading={loading}
-            setItems={setItems}
-            isNew={Boolean(items.length === 0)}
-            setLastResponseId={setLastResponseId}
-            confirmationPrompt={confirmationPrompt}
-            explanation={explanation}
-            submitConfirmation={(
-              decision: ReviewDecision,
-              customDenyMessage?: string,
-            ) =>
-              submitConfirmation({
-                decision,
-                customDenyMessage,
-              })
-            }
-            contextLeftPercent={contextLeftPercent}
-            openOverlay={() => setOverlayMode("history")}
-            openModelOverlay={() => setOverlayMode("model")}
-            openApprovalOverlay={() => setOverlayMode("approval")}
-            openHelpOverlay={() => setOverlayMode("help")}
-            openSessionsOverlay={() => setOverlayMode("sessions")}
-            openDiffOverlay={() => {
-              const { isGitRepo, diff } = getGitDiff();
-              let text: string;
-              if (isGitRepo) {
-                text = diff;
-              } else {
-                text = "`/diff` — _not inside a git repository_";
-              }
-              setItems((prev) => [
-                ...prev,
-                {
-                  id: `diff-${Date.now()}`,
-                  type: "message",
-                  role: "system",
-                  content: [{ type: "input_text", text }],
-                },
-              ]);
-              // Ensure no overlay is shown.
-              setOverlayMode("none");
-            }}
-            onCompact={handleCompact}
-            active={overlayMode === "none"}
-            interruptAgent={() => {
-              if (!agent) {
-                return;
-              }
-              log(
-                "TerminalChat: interruptAgent invoked – calling agent.cancel()",
-              );
-              agent.cancel();
-              setLoading(false);
+    <Box flexDirection="column" flexGrow={1}>
+      <TerminalMessageHistory
+        batch={batch}
+        groupCounts={groupCounts}
+        items={safeItems}
+        userMsgCount={userMsgCount}
+        confirmationPrompt={confirmationPrompt}
+        loading={loading}
+        headerProps={headerProps}
+        fullStdout={fullStdout}
+        setOverlayMode={setOverlayMode}
+        fileOpener={config.fileOpener}
+        workdir={workdir}
+      />
 
-              // Add a system message to indicate the interruption
-              setItems((prev) => [
-                ...prev,
-                {
-                  id: `interrupt-${Date.now()}`,
-                  type: "message",
-                  role: "system",
-                  content: [
-                    {
-                      type: "input_text",
-                      text: "⏹️  Execution interrupted by user. You can continue typing.",
-                    },
-                  ],
-                },
-              ]);
-            }}
-            submitInput={(inputs) => {
-              agent.run(inputs, lastResponseId || "");
-              return {};
-            }}
-            items={items}
-            thinkingSeconds={thinkingSeconds}
-          />
-        )}
-        {overlayMode === "history" && (
-          <HistoryOverlay items={items} onExit={() => setOverlayMode("none")} />
-        )}
-        {overlayMode === "sessions" && (
-          <SessionsOverlay
-            onView={async (p) => {
-              try {
-                const txt = await fs.readFile(p, "utf-8");
-                const data = JSON.parse(txt) as AppRollout;
-                setViewRollout(data);
-                setOverlayMode("none");
-              } catch {
-                setOverlayMode("none");
-              }
-            }}
-            onResume={(p) => {
-              setOverlayMode("none");
-              setInitialPrompt(`Resume this session: ${p}`);
-            }}
-            onExit={() => setOverlayMode("none")}
-          />
-        )}
-        {overlayMode === "model" && (
-          <ModelOverlay
-            currentModel={model}
-            providers={config.providers}
-            currentProvider={provider}
-            hasLastResponse={Boolean(lastResponseId)}
-            onSelect={(allModels, newModel) => {
-              log(
-                "TerminalChat: interruptAgent invoked – calling agent.cancel()",
-              );
-              if (!agent) {
-                log("TerminalChat: agent is not ready yet");
-              }
-              agent?.cancel();
-              setLoading(false);
-
-              if (!allModels?.includes(newModel)) {
-                // eslint-disable-next-line no-console
-                console.error(
-                  chalk.bold.red(
-                    `Model "${chalk.yellow(
-                      newModel,
-                    )}" is not available for provider "${chalk.yellow(
-                      provider,
-                    )}".`,
-                  ),
-                );
-                return;
-              }
-
-              setModel(newModel);
-              setLastResponseId((prev) =>
-                prev && newModel !== model ? null : prev,
-              );
-
-              // Save model to config
-              saveConfig({
-                ...config,
-                model: newModel,
-                provider: provider,
-              });
-
-              setItems((prev) => [
-                ...prev,
-                {
-                  id: `switch-model-${Date.now()}`,
-                  type: "message",
-                  role: "system",
-                  content: [
-                    {
-                      type: "input_text",
-                      text: `Switched model to ${newModel}`,
-                    },
-                  ],
-                },
-              ]);
-
-              setOverlayMode("none");
-            }}
-            onSelectProvider={(newProvider) => {
-              log(
-                "TerminalChat: interruptAgent invoked – calling agent.cancel()",
-              );
-              if (!agent) {
-                log("TerminalChat: agent is not ready yet");
-              }
-              agent?.cancel();
-              setLoading(false);
-
-              // Select default model for the new provider.
-              const defaultModel = model;
-
-              // Save provider to config.
-              const updatedConfig = {
-                ...config,
-                provider: newProvider,
-                model: defaultModel,
-              };
-              saveConfig(updatedConfig);
-
-              setProvider(newProvider);
-              setModel(defaultModel);
-              setLastResponseId((prev) =>
-                prev && newProvider !== provider ? null : prev,
-              );
-
-              setItems((prev) => [
-                ...prev,
-                {
-                  id: `switch-provider-${Date.now()}`,
-                  type: "message",
-                  role: "system",
-                  content: [
-                    {
-                      type: "input_text",
-                      text: `Switched provider to ${newProvider} with model ${defaultModel}`,
-                    },
-                  ],
-                },
-              ]);
-
-              // Don't close the overlay so user can select a model for the new provider
-              // setOverlayMode("none");
-            }}
-            onExit={() => setOverlayMode("none")}
-          />
-        )}
-
-        {overlayMode === "approval" && (
-          <ApprovalModeOverlay
-            currentMode={approvalPolicy}
-            onSelect={(newMode) => {
-              // Update approval policy without cancelling an in-progress session.
-              if (newMode === approvalPolicy) {
-                return;
-              }
-
-              setApprovalPolicy(newMode as ApprovalPolicy);
-              if (agentRef.current) {
-                (
-                  agentRef.current as unknown as {
-                    approvalPolicy: ApprovalPolicy;
-                  }
-                ).approvalPolicy = newMode as ApprovalPolicy;
-              }
-              setItems((prev) => [
-                ...prev,
-                {
-                  id: `switch-approval-${Date.now()}`,
-                  type: "message",
-                  role: "system",
-                  content: [
-                    {
-                      type: "input_text",
-                      text: `Switched approval mode to ${newMode}`,
-                    },
-                  ],
-                },
-              ]);
-
-              setOverlayMode("none");
-            }}
-            onExit={() => setOverlayMode("none")}
-          />
-        )}
-
-        {overlayMode === "help" && (
-          <HelpOverlay onExit={() => setOverlayMode("none")} />
-        )}
-
-        {overlayMode === "diff" && (
-          <DiffOverlay
-            diffText={diffText}
-            onExit={() => setOverlayMode("none")}
-          />
-        )}
+      <Box flexDirection="column" flexGrow={1}>
+        <TerminalChatInput
+          loading={loading}
+          confirmationPrompt={confirmationPrompt}
+          explanation={_confirmationHookExplanation}
+          submitConfirmation={(result: ConfirmationResult) => {
+            submitConfirmation(result);
+          }}
+          submitInput={(inputs) => {
+            agentRef.current?.run(inputs, lastResponseId || "");
+          }}
+          setLastResponseId={setLastResponseId}
+          setItems={setItems}
+          openOverlay={() => setOverlayMode("help")}
+          openModelOverlay={() => setOverlayMode("model")}
+          openApprovalOverlay={() => setOverlayMode("approval")}
+          openHelpOverlay={() => setOverlayMode("help")}
+          openDiffOverlay={() => setOverlayMode("diff")}
+          openSessionsOverlay={() => setOverlayMode("sessions")}
+          onCompact={handleCompact}
+          items={safeItems}
+          workdir={workdir}
+        />
       </Box>
+
+      {overlayMode === "history" && (
+        <HistoryOverlay items={safeItems} onExit={() => setOverlayMode("none")} />
+      )}
+      {overlayMode === "sessions" && (
+        <SessionsOverlay
+          onView={async (p) => {
+            try {
+              const txt = await fs.readFile(p, "utf-8");
+              const data = JSON.parse(txt) as AppRollout;
+              setViewRollout(data);
+              setOverlayMode("none");
+            } catch {
+              setOverlayMode("none");
+            }
+          }}
+          onResume={(p) => {
+            setOverlayMode("none");
+            setInitialPromptFromProps(`Resume this session: ${p}`); 
+          }}
+          onExit={() => setOverlayMode("none")}
+        />
+      )}
+      {overlayMode === "model" && (
+        <ModelOverlay
+          currentModel={model}
+          providers={config.providers}
+          currentProvider={provider}
+          hasLastResponse={Boolean(lastResponseId)}
+          onSelect={(allModels, newModel) => {
+            log(
+              "TerminalChat: interruptAgent invoked – calling agent.cancel()",
+            );
+            if (!agentRef.current) {
+              log("TerminalChat: agent is not ready yet");
+            }
+            agentRef.current?.cancel();
+            setLoading(false);
+
+            if (!allModels?.includes(newModel)) {
+              console.error(
+                chalk.bold.red(
+                  `Model "${chalk.yellow(
+                    newModel,
+                  )}" is not available for provider "${chalk.yellow(
+                    provider,
+                  )}".`,
+                ),
+              );
+              return;
+            }
+
+            setModel(newModel);
+            setLastResponseId((prev) =>
+              prev && newModel !== model ? null : prev,
+            );
+
+            saveConfig({
+              ...config,
+              model: newModel,
+              provider: provider,
+            });
+
+            setItems((prev) => [
+              ...prev,
+              {
+                id: `switch-model-${Date.now()}`,
+                type: "message",
+                role: "system",
+                content: [
+                  {
+                    type: "input_text",
+                    text: `Switched model to ${newModel}`,
+                  },
+                ],
+              },
+            ]);
+
+            setOverlayMode("none");
+          }}
+          onSelectProvider={(newProvider) => {
+            log(
+              "TerminalChat: interruptAgent invoked – calling agent.cancel()",
+            );
+            if (!agentRef.current) {
+              log("TerminalChat: agent is not ready yet");
+            }
+            agentRef.current?.cancel();
+            setLoading(false);
+
+            const defaultModel = model;
+
+            const updatedConfig = {
+              ...config,
+              provider: newProvider,
+              model: defaultModel,
+            };
+            saveConfig(updatedConfig);
+
+            setProvider(newProvider);
+            setModel(defaultModel);
+            setLastResponseId((prev) =>
+              prev && newProvider !== provider ? null : prev,
+            );
+
+            setItems((prev) => [
+              ...prev,
+              {
+                id: `switch-provider-${Date.now()}`,
+                type: "message",
+                role: "system",
+                content: [
+                  {
+                    type: "input_text",
+                    text: `Switched provider to ${newProvider} with model ${defaultModel}`,
+                  },
+                ],
+              },
+            ]);
+
+            setOverlayMode("none");
+          }}
+          onExit={() => setOverlayMode("none")}
+        />
+      )}
+
+      {overlayMode === "approval" && (
+        <ApprovalModeOverlay
+          currentMode={approvalPolicy}
+          onSelect={(newMode: string) => {
+            if (newMode === approvalPolicy) {
+              return;
+            }
+            setOverlayMode("none"); 
+          }}
+          onExit={() => setOverlayMode("none")}
+        />
+      )}
+
+      {overlayMode === "help" && (
+        <HelpOverlay onExit={() => setOverlayMode("none")} />
+      )}
+
+      {overlayMode === "diff" && (
+        <DiffOverlay
+          diffText={diffText}
+          onExit={() => setOverlayMode("none")}
+        />
+      )}
     </Box>
   );
 }

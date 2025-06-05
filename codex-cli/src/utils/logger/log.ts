@@ -39,6 +39,8 @@ class AsyncLogger implements Logger {
 
     try {
       await fs.appendFile(this.filePath, messages);
+    } catch (error) {
+      console.error("[AsyncLogger.maybeWrite] Error writing to log file:", error);
     } finally {
       this.isWriting = false;
     }
@@ -65,7 +67,7 @@ function now() {
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   const seconds = String(date.getSeconds()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+  return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`; // Replaced T with _ and : with -
 }
 
 let logger: Logger;
@@ -77,10 +79,11 @@ let logger: Logger;
  * - Mac/Windows: `tail -F "$TMPDIR/oai-codex/codex-cli-latest.log"`
  * - Linux: `tail -F ~/.local/oai-codex/codex-cli-latest.log`
  */
-export function initLogger(): Logger {
+export function initLogger(debugMode?: boolean): Logger {
+  // Suppressing all console logs during initialization
   if (logger) {
     return logger;
-  } else if (!process.env["DEBUG"]) {
+  } else if (debugMode === false || (debugMode === undefined && !process.env["DEBUG"])) {
     logger = new EmptyLogger();
     return logger;
   }

@@ -1,5 +1,5 @@
 import type { ReviewDecision } from "./review.js";
-import type { ApplyPatchCommand, ApprovalPolicy } from "../../approvals.js";
+import type { ApplyPatchCommand, ApprovalPolicy, SafetyAssessment } from "../../approvals.js";
 import type { AppConfig } from "../config.js";
 import type { ResponseEvent } from "../responses.js";
 import type {
@@ -78,10 +78,14 @@ type AgentLoopParams = {
 
   /** Called when the command is not auto-approved to request explicit user review. */
   getCommandConfirmation: (
+    safetyAssessment: SafetyAssessment,
     command: Array<string>,
     applyPatch: ApplyPatchCommand | undefined,
   ) => Promise<CommandConfirmation>;
   onLastResponseId: (lastResponseId: string) => void;
+  
+  /** Called when the working directory changes. */
+  onWorkdirChanged?: (newWorkdir: string) => void;
 };
 
 const shellFunctionTool: FunctionTool = {
@@ -109,8 +113,8 @@ const shellFunctionTool: FunctionTool = {
 };
 
 const localShellTool: Tool = {
-  //@ts-expect-error - waiting on sdk
-  type: "local_shell",
+  // The type property expects specific string literals from Tool type
+  type: "local_shell" as any,
 };
 
 export class AgentLoop {
@@ -132,7 +136,8 @@ export class AgentLoop {
 
   private onItem: (item: ResponseItem) => void;
   private onLoading: (loading: boolean) => void;
-  private getCommandConfirmation: (
+  private readonly getCommandConfirmation: (
+    safetyAssessment: SafetyAssessment,
     command: Array<string>,
     applyPatch: ApplyPatchCommand | undefined,
   ) => Promise<CommandConfirmation>;
@@ -304,8 +309,10 @@ export class AgentLoop {
 
     this.disableResponseStorage = disableResponseStorage ?? false;
     this.sessionId = getSessionId() || randomUUID().replaceAll("-", "");
+    
     // Configure OpenAI client with optional timeout (ms) from environment
-    const timeoutMs = OPENAI_TIMEOUT_MS;
+    // Increase the timeout for large outputs to prevent connection closures
+    const timeoutMs = OPENAI_TIMEOUT_MS || 120000; // Default to 2 minutes if not specified
     const apiKey = this.config.apiKey ?? process.env["OPENAI_API_KEY"] ?? "";
     const baseURL = getBaseUrl(this.provider);
 
@@ -453,7 +460,8 @@ export class AgentLoop {
         this.config,
         this.approvalPolicy,
         this.additionalWritableRoots,
-        this.getCommandConfirmation,
+        // Use the full signature with SafetyAssessment parameter
+        (safetyAssessment, command, applyPatch) => this.getCommandConfirmation(safetyAssessment, command, applyPatch),
         this.execAbortController?.signal,
       );
       outputItem.output = JSON.stringify({ output: outputText, metadata });
@@ -521,7 +529,8 @@ export class AgentLoop {
       this.config,
       this.approvalPolicy,
       this.additionalWritableRoots,
-      this.getCommandConfirmation,
+      (safetyAssessment, command, applyPatch) =>
+        this.getCommandConfirmation(safetyAssessment, command, applyPatch),
       this.execAbortController?.signal,
     );
     outputItem.output = JSON.stringify({ output: outputText, metadata });
@@ -725,10 +734,8 @@ export class AgentLoop {
                 if (
                   (item as ResponseInputItem).type === "function_call" ||
                   (item as ResponseInputItem).type === "reasoning" ||
-                  //@ts-expect-error - waiting on sdk
-                  (item as ResponseInputItem).type === "local_shell_call" ||
+                  (item as any).type === "local_shell_call" ||
                   ((item as ResponseInputItem).type === "message" &&
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     (item as any).role === "user")
                 ) {
                   return;
@@ -1556,7 +1563,7 @@ export class AgentLoop {
     }
   }
 
-  // we need until we can depend on streaming events
+  // Process events in a streaming fashion to improve responsiveness
   private async processEventsWithoutStreaming(
     output: Array<ResponseInputItem>,
     emitItem: (item: ResponseItem) => void,
@@ -1568,29 +1575,69 @@ export class AgentLoop {
     if (this.canceled) {
       return [];
     }
+    
     const turnInput: Array<ResponseInputItem> = [];
+    
+    // First emit all non-function call items for immediate display
+    for (const item of output) {
+      if (item.type !== "function_call" && item.type !== "local_shell_call") {
+        emitItem(item as ResponseItem);
+      }
+    }
+    
+    // Then process function calls one by one
     for (const item of output) {
       if (item.type === "function_call") {
+        // Skip already processed function calls
         if (alreadyProcessedResponses.has(item.id)) {
           continue;
         }
+        
+        // Mark as processed
         alreadyProcessedResponses.add(item.id);
+        
+        // Show the function call in the UI
+        emitItem(item as ResponseItem);
+        
+        // Process the function call SYNCHRONOUSLY
         // eslint-disable-next-line no-await-in-loop
         const result = await this.handleFunctionCall(item);
+        
+        // Add results to turnInput for the next API call
         turnInput.push(...result);
-        //@ts-expect-error - waiting on sdk
+        
+        // Also show the function output in the UI
+        for (const resultItem of result) {
+          emitItem(resultItem as ResponseItem);
+        }
+        
       } else if (item.type === "local_shell_call") {
-        //@ts-expect-error - waiting on sdk
-        if (alreadyProcessedResponses.has(item.id)) {
+        // Skip already processed shell calls
+        const shellId = (item as any).id;
+        if (shellId && alreadyProcessedResponses.has(shellId)) {
           continue;
         }
-        //@ts-expect-error - waiting on sdk
-        alreadyProcessedResponses.add(item.id);
+        
+        // Mark as processed
+        if (shellId) {
+          alreadyProcessedResponses.add(shellId);
+        }
+        
+        // Show the shell call in the UI
+        emitItem(item as ResponseItem);
+        
+        // Process the shell call SYNCHRONOUSLY
         // eslint-disable-next-line no-await-in-loop
         const result = await this.handleLocalShellCall(item);
+        
+        // Add results to turnInput for the next API call
         turnInput.push(...result);
+        
+        // Also show the shell output in the UI
+        for (const resultItem of result) {
+          emitItem(resultItem as ResponseItem);
+        }
       }
-      emitItem(item as ResponseItem);
     }
     return turnInput;
   }

@@ -1,7 +1,8 @@
 export enum AutoApprovalMode {
   SUGGEST = "suggest",
   AUTO_EDIT = "auto-edit",
-  FULL_AUTO = "full-auto",
+  FULL_AUTO = "full_auto", // Changed from full-auto to full_auto to match UI
+  NONE = "none",
 }
 
 export enum FullAutoErrorMode {
