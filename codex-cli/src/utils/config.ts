@@ -6,10 +6,10 @@
 // `./auto-approval-mode.js`, so the change is completely transparent for the
 // compiled `dist/` output used by the published CLI.
 
-import type { FullAutoErrorMode } from "./auto-approval-mode.js";
+import type { FullAutoErrorMode } from "./auto-approval-mode";
 import type { ReasoningEffort } from "openai/resources.mjs";
 
-import { AutoApprovalMode } from "./auto-approval-mode.js";
+import { AutoApprovalMode } from "./auto-approval-mode";
 import { log } from "./logger/log.js";
 import { providers } from "./providers.js";
 import { config as loadDotenv } from "dotenv";

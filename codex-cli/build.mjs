@@ -76,6 +76,7 @@ const prodBuildOptions = {
   platform: "node",
   outfile: path.resolve(OUT_DIR, isDevBuild ? "cli-dev.js" : "cli.js"),
   minify: !isDevBuild,
+  keepNames: true, // Prevent mangling of names, e.g. for enums
   sourcemap: isDevBuild ? "inline" : true,
   plugins,
   define: {
@@ -91,41 +92,41 @@ const prodBuildOptions = {
 const baseBuildOptions = isDevBuild ? {} : prodBuildOptions; // Placeholder, will define dev options next
 
 async function build() {
-  tempCliTsxPath = path.resolve("./src/cli_temp_" + Date.now() + ".tsx");
+  // tempCliTsxPath = path.resolve("./src/cli_temp_" + Date.now() + ".tsx"); // Temporarily disabled
 
   // Cleanup: Check for leftover temp file from a previous failed run
-  const srcDirContents = fs.readdirSync(path.resolve("./src"));
-  const leftoverTempFile = srcDirContents.find(file => file.startsWith("cli_temp_") && file.endsWith(".tsx"));
-  if (leftoverTempFile) {
-    const leftoverTempFilePath = path.resolve("./src", leftoverTempFile);
-    console.log(`[build.mjs] Found leftover temp file: ${leftoverTempFilePath}. Renaming it back to ${originalCliTsxPath}`);
-    try {
-      fs.renameSync(leftoverTempFilePath, originalCliTsxPath);
-    } catch (cleanupError) {
-      console.error(`[build.mjs] Error renaming leftover temp file: ${cleanupError}. Proceeding might fail.`);
-    }
-  }
+  // const srcDirContents = fs.readdirSync(path.resolve("./src")); // Temporarily disabled
+  // const leftoverTempFile = srcDirContents.find(file => file.startsWith("cli_temp_") && file.endsWith(".tsx")); // Temporarily disabled
+  // if (leftoverTempFile) { // Temporarily disabled
+  //   const leftoverTempFilePath = path.resolve("./src", leftoverTempFile); // Temporarily disabled
+  //   console.log(`[build.mjs] Found leftover temp file: ${leftoverTempFilePath}. Renaming it back to ${originalCliTsxPath}`); // Temporarily disabled
+  //   try { // Temporarily disabled
+  //     fs.renameSync(leftoverTempFilePath, originalCliTsxPath); // Temporarily disabled
+  //   } catch (cleanupError) { // Temporarily disabled
+  //     console.error(`[build.mjs] Error renaming leftover temp file: ${cleanupError}. Proceeding might fail.`); // Temporarily disabled
+  //   } // Temporarily disabled
+  // } // Temporarily disabled
 
 
   try {
-    fs.renameSync(originalCliTsxPath, tempCliTsxPath);
-    console.log(`[build.mjs] Renamed ${originalCliTsxPath} to ${tempCliTsxPath}`);
+    // fs.renameSync(originalCliTsxPath, tempCliTsxPath); // Temporarily disabled
+    // console.log(`[build.mjs] Renamed ${originalCliTsxPath} to ${tempCliTsxPath}`); // Temporarily disabled
 
-    const tempFileContent = fs.readFileSync(tempCliTsxPath, "utf8");
-    const tempMarker = "// Force re-read by esbuild";
-    const tempMarkerIndex = tempFileContent.indexOf(tempMarker);
-    if (tempMarkerIndex !== -1) {
-      console.log(`[build.mjs] Snippet from TEMP file ${tempCliTsxPath} (from '${tempMarker}', length approx 200 chars):\n---\n${tempFileContent.substring(tempMarkerIndex, tempMarkerIndex + 200)}\n---`);
-    } else {
-      console.log(`[build.mjs] Diagnostic marker '${tempMarker}' not found in TEMP file ${tempCliTsxPath}!`);
-    }
+    // const tempFileContent = fs.readFileSync(tempCliTsxPath, "utf8"); // Temporarily disabled
+    // const tempMarker = "// Force re-read by esbuild"; // Temporarily disabled
+    // const tempMarkerIndex = tempFileContent.indexOf(tempMarker); // Temporarily disabled
+    // if (tempMarkerIndex !== -1) { // Temporarily disabled
+    //   console.log(`[build.mjs] Snippet from TEMP file ${tempCliTsxPath} (from '${tempMarker}', length approx 200 chars):\n---\n${tempFileContent.substring(tempMarkerIndex, tempMarkerIndex + 200)}\n---`); // Temporarily disabled
+    // } else { // Temporarily disabled
+    //   console.log(`[build.mjs] Diagnostic marker '${tempMarker}' not found in TEMP file ${tempCliTsxPath}!`); // Temporarily disabled
+    // } // Temporarily disabled
 
     let currentBuildOptions;
     if (isDevBuild) {
       console.log('[build.mjs] Using MINIMAL dev build options.');
       console.log('[build.mjs] Inspecting ignoreReactDevToolsPlugin for dev build:', typeof ignoreReactDevToolsPlugin, ignoreReactDevToolsPlugin ? ignoreReactDevToolsPlugin.name : 'undefined');
       currentBuildOptions = {
-        entryPoints: [tempCliTsxPath],
+        entryPoints: [originalCliTsxPath],
         outfile: path.resolve(OUT_DIR, "cli-dev.js"),
         bundle: true,
         platform: "node",
@@ -139,7 +140,7 @@ async function build() {
       console.log('[build.mjs] Using production build options.');
       currentBuildOptions = {
         ...prodBuildOptions,
-        entryPoints: [tempCliTsxPath], // entryPoints was missing from prodBuildOptions before
+        entryPoints: [originalCliTsxPath], // Using original path directly
         outfile: path.resolve(OUT_DIR, "cli.js"), // Force cli.js as output regardless of build mode
         minify: true, // Ensure prod minify is true
         sourcemap: true // Ensure prod sourcemap is true (or 'external')
@@ -153,14 +154,12 @@ async function build() {
     fs.mkdirSync(outPath, { recursive: true });
     console.log(`[build.mjs] Cleaned and created output directory: ${outPath}`);
 
-    // --- Verify tempCliTsxPath content before esbuild --- 
-    const tempFileContentForVerification = fs.readFileSync(tempCliTsxPath, 'utf8');
-    // DISABLED MARKER CHECK: After restoring the original cli.tsx file, the marker is no longer present
-    // Instead, just check if we have some content to build
-    if (tempFileContentForVerification.length > 0) {
-      console.log(`[build.mjs] VERIFIED: tempCliTsxPath (${tempCliTsxPath}) contains content (${tempFileContentForVerification.length} bytes). Proceeding with build.`);
+    // --- File verification (using originalCliTsxPath) --- 
+    const originalFileContentForVerification = fs.readFileSync(originalCliTsxPath, 'utf8');
+    if (originalFileContentForVerification.length > 0) {
+      console.log(`[build.mjs] VERIFIED: originalCliTsxPath (${originalCliTsxPath}) contains content (${originalFileContentForVerification.length} bytes). Proceeding with build.`);
     } else {
-      console.error(`[build.mjs] CRITICAL ERROR: tempCliTsxPath (${tempCliTsxPath}) appears to be empty. Build will likely fail.`);
+      console.error(`[build.mjs] CRITICAL ERROR: originalCliTsxPath (${originalCliTsxPath}) appears to be empty. Build will likely fail.`);
     }
     // --- End verification --- 
 
@@ -199,16 +198,9 @@ async function build() {
   } catch (error) {
     console.error("[build.mjs] Build failed in catch block:", error);
     console.log('[build.mjs] Forcing exit due to error in catch block.');
-    process.exit(1);
+    process.exit(1); // Force exit on error
   } finally {
-    if (fs.existsSync(tempCliTsxPath)) {
-      fs.renameSync(tempCliTsxPath, originalCliTsxPath);
-      console.log(`[build.mjs] Renamed ${tempCliTsxPath} back to ${originalCliTsxPath}`);
-    } else {
-      if (!fs.existsSync(originalCliTsxPath)) {
-         console.error(`[build.mjs] CRITICAL: Both ${tempCliTsxPath} and ${originalCliTsxPath} are missing! Ensure ${originalCliTsxPath} exists.`);
-      }
-    }
+    console.log("[build.mjs] File renaming logic in 'finally' block is temporarily disabled.");
   }
 }
 

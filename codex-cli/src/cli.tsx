@@ -19,7 +19,7 @@ if (major < 22) {
 (process as any).noDeprecation = true;
 
 import type { AppRollout } from "./app";
-import type { ApprovalPolicy, ApplyPatchCommand } from "./approvals";
+import type { ApprovalPolicy, ApplyPatchCommand, SafetyAssessment } from "./approvals";
 import type { CommandConfirmation } from "./utils/agent/agent-loop";
 import type { AppConfig } from "./utils/config";
 import type { ResponseItem } from "openai/resources/responses/responses";
@@ -523,6 +523,7 @@ const additionalWritableRoots: ReadonlyArray<string> = (
 ).map((p) => path.resolve(p));
 
 // For --quiet, run the cli without user interactions and exit.
+const ResolvedAAM = AutoApprovalMode;
 if (cli.flags.quiet) {
   process.env["CODEX_QUIET_MODE"] = "1";
   if (!prompt || prompt.trim() === "") {
@@ -536,10 +537,10 @@ if (cli.flags.quiet) {
   // Determine approval policy for quiet mode based on flags
   const quietApprovalPolicy: ApprovalPolicy =
     cli.flags.fullAuto || cli.flags.approvalMode === "full-auto"
-      ? AutoApprovalMode.FULL_AUTO
+      ? ResolvedAAM.FULL_AUTO
       : cli.flags.autoEdit || cli.flags.approvalMode === "auto-edit"
-        ? AutoApprovalMode.AUTO_EDIT
-        : config.approvalMode || AutoApprovalMode.SUGGEST;
+        ? ResolvedAAM.AUTO_EDIT
+        : config.approvalMode || ResolvedAAM.SUGGEST;
 
   await runQuietMode({
     prompt,
@@ -567,10 +568,10 @@ if (cli.flags.quiet) {
 
 const approvalPolicy: ApprovalPolicy =
   cli.flags.fullAuto || cli.flags.approvalMode === "full-auto"
-    ? AutoApprovalMode.FULL_AUTO
+    ? ResolvedAAM.FULL_AUTO
     : cli.flags.autoEdit || cli.flags.approvalMode === "auto-edit"
-      ? AutoApprovalMode.AUTO_EDIT
-      : config.approvalMode || AutoApprovalMode.SUGGEST;
+      ? ResolvedAAM.AUTO_EDIT
+      : config.approvalMode || ResolvedAAM.SUGGEST;
 
 const instance = render(
   <App
@@ -666,6 +667,7 @@ async function runQuietMode({
       /* intentionally ignored in quiet mode */
     },
     getCommandConfirmation: async (
+      _safetyAssessment: SafetyAssessment,
       command: string[],
       _applyPatch: ApplyPatchCommand | undefined
     ): Promise<CommandConfirmation> => {
