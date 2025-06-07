@@ -6,6 +6,7 @@ import {
 } from "./utils/agent/apply-patch";
 import * as path from "path";
 import { parse } from "shell-quote";
+import { AutoApprovalMode } from "./utils/auto-approval-mode.js";
 
 export type SafetyAssessment = {
   /**
@@ -78,7 +79,11 @@ export type ApprovalPolicy =
  */
 // Helper function to check policy values for TypeScript narrowing
 function isFullAutoOrNone(policy: ApprovalPolicy): boolean {
-  return policy === "full-auto" || policy === "full_auto" || policy === "none";
+  return (
+    policy === "full-auto" ||
+    policy === AutoApprovalMode.FULL_AUTO ||
+    policy === AutoApprovalMode.NONE
+  );
 }
 
 export function canAutoApprove(
@@ -104,7 +109,8 @@ export function canAutoApprove(
     return {
       type: "auto-approve",
       // Run in sandbox if in full-auto mode, but not in none mode
-      runInSandbox: policy === "full-auto",
+      runInSandbox:
+        policy === "full-auto" || policy === AutoApprovalMode.FULL_AUTO,
       reason: `Approval policy is '${policy}'`,
       group: command[0] === "apply_patch" ? "Editing" : "Running commands",
       ...(command[0] === "apply_patch" && {
@@ -160,7 +166,8 @@ export function canAutoApprove(
           type: "auto-approve",
           reason: `${policy === "full-auto" ? "Full auto" : "None"} mode (unparsable bash command)`,
           group: "Running commands",
-          runInSandbox: policy === "full-auto", // Keep sandbox for unparsable bash in full-auto, but not in none
+          runInSandbox:
+            policy === "full-auto" || policy === AutoApprovalMode.FULL_AUTO, // Keep sandbox for unparsable bash in full-auto, but not in none
         };
       } else {
         // For suggest and auto-edit policies
@@ -194,7 +201,8 @@ export function canAutoApprove(
       type: "auto-approve",
       reason: `${policy === "full-auto" ? "Full auto" : "None"} mode (command not on explicit safe list)`,
       group: "Running commands",
-      runInSandbox: policy === "full-auto", // Use sandbox in full-auto mode only
+      runInSandbox:
+        policy === "full-auto" || policy === AutoApprovalMode.FULL_AUTO, // Use sandbox in full-auto mode only
     };
   }
 
@@ -208,7 +216,7 @@ function canAutoApproveApplyPatch(
   policy: ApprovalPolicy,
 ): SafetyAssessment {
   // START ADDITION: Handle "none" policy upfront for apply_patch
-  if (policy === "none") {
+  if (policy === AutoApprovalMode.NONE) {
     return {
       type: "auto-approve",
       runInSandbox: false,
@@ -248,7 +256,7 @@ function canAutoApproveApplyPatch(
     };
   }
 
-  return policy === "full-auto"
+  return policy === "full-auto" || policy === AutoApprovalMode.FULL_AUTO
     ? {
         type: "auto-approve",
         reason: "Full auto mode",
