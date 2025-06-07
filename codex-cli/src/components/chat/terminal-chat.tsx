@@ -638,32 +638,53 @@ export const TerminalChat: React.FC<Props> = ({
             setOverlayMode("none");
           }}
           onSelectProvider={(newProvider) => {
-            log(
-              "TerminalChat: interruptAgent invoked – calling agent.cancel()",
-            );
-            if (!agentRef.current) {
-              log("TerminalChat: agent is not ready yet");
-            }
-            agentRef.current?.cancel();
+            log("TerminalChat: onSelectProvider called for new provider: " + newProvider);
+            agentRef.current?.cancel(); // Cancel any ongoing agent activity
             setLoading(false);
 
-            const defaultModel = model;
+            let newModelForProvider = ""; // Default to empty string (forces selection)
 
+            const providerDefaults: Record<string, string> = {
+              "openai": "o4-mini", // Default OpenAI model
+              "gemini": "gemini-pro", // A common, likely available Gemini model
+              // Potentially add other known provider defaults here
+            };
+
+            const lowerNewProvider = newProvider.toLowerCase();
+            if (providerDefaults[lowerNewProvider]) {
+              newModelForProvider = providerDefaults[lowerNewProvider];
+              log(`TerminalChat: Found default model '${newModelForProvider}' for provider '${newProvider}'`);
+            } else {
+              log(`TerminalChat: No specific default model found for provider '${newProvider}'. Model will be cleared.`);
+            }
+
+            const oldProvider = provider; // Capture old provider for comparison
+            const oldModel = model; // Capture old model for comparison
+
+            setModel(newModelForProvider); // Update the model state
+            setProvider(newProvider);     // Update the provider state
+
+            // Update and save the configuration
             const updatedConfig = {
               ...config,
               provider: newProvider,
-              model: defaultModel,
+              model: newModelForProvider,
             };
             saveConfig(updatedConfig);
+            log("TerminalChat: Configuration saved with new provider and model.");
 
-            setProvider(newProvider);
-            setModel(defaultModel);
-            setLastResponseId((prev) =>
-              prev && newProvider !== provider ? null : prev,
-            );
+            // Reset lastResponseId if provider or model actually changes to ensure fresh context
+            setLastResponseId((prevLastResponseId) => {
+              if (newProvider !== oldProvider || newModelForProvider !== oldModel) {
+                log("TerminalChat: Provider or model changed, resetting lastResponseId.");
+                return null;
+              }
+              return prevLastResponseId;
+            });
 
-            setItems((prev) => [
-              ...prev,
+            // Update chat items with a system message
+            setItems((prevItems) => [
+              ...prevItems,
               {
                 id: `switch-provider-${Date.now()}`,
                 type: "message",
@@ -671,11 +692,15 @@ export const TerminalChat: React.FC<Props> = ({
                 content: [
                   {
                     type: "input_text",
-                    text: `Switched provider to ${newProvider} with model ${defaultModel}`,
+                    text: `Switched provider to ${newProvider}. ${newModelForProvider ? `Model set to '${newModelForProvider}'.` : "Please select a model."}`,
                   },
                 ],
-              },
+              } as ResponseItem, // Type assertion
             ]);
+            log("TerminalChat: System message added for provider/model switch.");
+            // The ModelOverlay component will automatically re-fetch and display models
+            // for the `newProvider` because its `useEffect` hook depends on `currentProvider`.
+            // The `currentModel` prop of ModelOverlay will be `newModelForProvider`.
           }}
           onExit={() => setOverlayMode("none")}
         />
@@ -739,32 +764,53 @@ export const TerminalChat: React.FC<Props> = ({
             setOverlayMode("none");
           }}
           onSelectProvider={(newProvider) => {
-            log(
-              "TerminalChat: interruptAgent invoked – calling agent.cancel()",
-            );
-            if (!agentRef.current) {
-              log("TerminalChat: agent is not ready yet");
-            }
-            agentRef.current?.cancel();
+            log("TerminalChat: onSelectProvider called for new provider: " + newProvider);
+            agentRef.current?.cancel(); // Cancel any ongoing agent activity
             setLoading(false);
 
-            const defaultModel = model;
+            let newModelForProvider = ""; // Default to empty string (forces selection)
 
+            const providerDefaults: Record<string, string> = {
+              "openai": "o4-mini", // Default OpenAI model
+              "gemini": "gemini-pro", // A common, likely available Gemini model
+              // Potentially add other known provider defaults here
+            };
+
+            const lowerNewProvider = newProvider.toLowerCase();
+            if (providerDefaults[lowerNewProvider]) {
+              newModelForProvider = providerDefaults[lowerNewProvider];
+              log(`TerminalChat: Found default model '${newModelForProvider}' for provider '${newProvider}'`);
+            } else {
+              log(`TerminalChat: No specific default model found for provider '${newProvider}'. Model will be cleared.`);
+            }
+
+            const oldProvider = provider; // Capture old provider for comparison
+            const oldModel = model; // Capture old model for comparison
+
+            setModel(newModelForProvider); // Update the model state
+            setProvider(newProvider);     // Update the provider state
+
+            // Update and save the configuration
             const updatedConfig = {
               ...config,
               provider: newProvider,
-              model: defaultModel,
+              model: newModelForProvider,
             };
             saveConfig(updatedConfig);
+            log("TerminalChat: Configuration saved with new provider and model.");
 
-            setProvider(newProvider);
-            setModel(defaultModel);
-            setLastResponseId((prev) =>
-              prev && newProvider !== provider ? null : prev,
-            );
+            // Reset lastResponseId if provider or model actually changes to ensure fresh context
+            setLastResponseId((prevLastResponseId) => {
+              if (newProvider !== oldProvider || newModelForProvider !== oldModel) {
+                log("TerminalChat: Provider or model changed, resetting lastResponseId.");
+                return null;
+              }
+              return prevLastResponseId;
+            });
 
-            setItems((prev) => [
-              ...prev,
+            // Update chat items with a system message
+            setItems((prevItems) => [
+              ...prevItems,
               {
                 id: `switch-provider-${Date.now()}`,
                 type: "message",
@@ -772,11 +818,15 @@ export const TerminalChat: React.FC<Props> = ({
                 content: [
                   {
                     type: "input_text",
-                    text: `Switched provider to ${newProvider} with model ${defaultModel}`,
+                    text: `Switched provider to ${newProvider}. ${newModelForProvider ? `Model set to '${newModelForProvider}'.` : "Please select a model."}`,
                   },
                 ],
-              },
+              } as ResponseItem, // Type assertion
             ]);
+            log("TerminalChat: System message added for provider/model switch.");
+            // The ModelOverlay component will automatically re-fetch and display models
+            // for the `newProvider` because its `useEffect` hook depends on `currentProvider`.
+            // The `currentModel` prop of ModelOverlay will be `newModelForProvider`.
           }}
           onExit={() => setOverlayMode("none")}
         />
