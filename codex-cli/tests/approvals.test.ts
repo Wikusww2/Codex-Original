@@ -22,8 +22,8 @@ describe("canAutoApprove()", () => {
   test("simple safe commands", () => {
     expect(check(["ls"])).toEqual({
       type: "auto-approve",
-      reason: "List directory",
-      group: "Searching",
+      reason: "List files/List directory",
+      group: "Reading files",
       runInSandbox: false,
     });
     expect(check(["cat", "file.txt"])).toEqual({
@@ -49,14 +49,14 @@ describe("canAutoApprove()", () => {
   test("simple safe commands within a `bash -lc` call", () => {
     expect(check(["bash", "-lc", "ls"])).toEqual({
       type: "auto-approve",
-      reason: "List directory",
-      group: "Searching",
+      reason: "List files/List directory",
+      group: "Reading files",
       runInSandbox: false,
     });
     expect(check(["bash", "-lc", "ls $HOME"])).toEqual({
       type: "auto-approve",
-      reason: "List directory",
-      group: "Searching",
+      reason: "List files/List directory",
+      group: "Reading files",
       runInSandbox: false,
     });
     expect(check(["bash", "-lc", "git show ab9811cb90"])).toEqual({
@@ -76,8 +76,8 @@ describe("canAutoApprove()", () => {
     // operators like "&&" the entire expression can be auto‑approved.
     expect(check(["bash", "-lc", "ls && pwd"])).toEqual({
       type: "auto-approve",
-      reason: "List directory",
-      group: "Searching",
+      reason: "List files/List directory",
+      group: "Reading files",
       runInSandbox: false,
     });
   });
