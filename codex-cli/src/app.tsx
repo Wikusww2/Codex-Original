@@ -38,14 +38,11 @@ export default function App({
 }: Props): JSX.Element {
   const app = useApp();
   const [accepted, setAccepted] = useState(() => false);
-  const [cwd, inGitRepo] = useMemo(
-    () => {
-      const currentCwd = process.cwd();
-      const gitRepoStatus = checkInGit(currentCwd);
-      return [currentCwd, gitRepoStatus];
-    },
-    [],
-  );
+  const [cwd, inGitRepo] = useMemo(() => {
+    const currentCwd = process.cwd();
+    const gitRepoStatus = checkInGit(currentCwd);
+    return [currentCwd, gitRepoStatus];
+  }, []);
   const { internal_eventEmitter } = useStdin();
   internal_eventEmitter.setMaxListeners(20);
 

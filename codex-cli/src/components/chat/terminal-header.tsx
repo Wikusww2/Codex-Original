@@ -64,7 +64,8 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
               </Text>
             </Text>
             <Text dimColor>
-              <Text color="blueBright">↳</Text> workdir: <Text bold>{workdir || PWD}</Text>
+              <Text color="blueBright">↳</Text> workdir:{" "}
+              <Text bold>{workdir || PWD}</Text>
             </Text>
             <Text dimColor>
               <Text color="blueBright">↳</Text> model: <Text bold>{model}</Text>

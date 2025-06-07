@@ -6,7 +6,12 @@ import { type SupportedModelId, openAiModelInfo } from "./model-info.js";
 import { createOpenAIClient } from "./openai-client.js";
 
 const MODEL_LIST_TIMEOUT_MS = 2_000; // 2 seconds
-export const RECOMMENDED_MODELS: Array<string> = ["o4-mini", "o3", "deepseek-chat", "deepseek-reasoner"];
+export const RECOMMENDED_MODELS: Array<string> = [
+  "o4-mini",
+  "o3",
+  "deepseek-chat",
+  "deepseek-reasoner",
+];
 
 /**
  * Background model loader / cache.

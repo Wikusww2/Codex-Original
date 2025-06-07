@@ -1,5 +1,9 @@
 import type { ReviewDecision } from "./review.js";
-import type { ApplyPatchCommand, ApprovalPolicy, SafetyAssessment } from "../../approvals.js";
+import type {
+  ApplyPatchCommand,
+  ApprovalPolicy,
+  SafetyAssessment,
+} from "../../approvals.js";
 import type { AppConfig } from "../config.js";
 import type { ResponseEvent } from "../responses.js";
 import type {
@@ -83,7 +87,7 @@ export type AgentLoopParams = {
     applyPatch: ApplyPatchCommand | undefined,
   ) => Promise<CommandConfirmation>;
   onLastResponseId: (lastResponseId: string) => void;
-  
+
   /** Called when the working directory changes. */
   onWorkdirChanged?: (newWorkdir: string) => void;
 };
@@ -309,7 +313,7 @@ export class AgentLoop {
 
     this.disableResponseStorage = disableResponseStorage ?? false;
     this.sessionId = getSessionId() || randomUUID().replaceAll("-", "");
-    
+
     // Configure OpenAI client with optional timeout (ms) from environment
     // Increase the timeout for large outputs to prevent connection closures
     const timeoutMs = OPENAI_TIMEOUT_MS || 120000; // Default to 2 minutes if not specified
@@ -461,7 +465,8 @@ export class AgentLoop {
         this.approvalPolicy,
         this.additionalWritableRoots,
         // Use the full signature with SafetyAssessment parameter
-        (safetyAssessment, command, applyPatch) => this.getCommandConfirmation(safetyAssessment, command, applyPatch),
+        (safetyAssessment, command, applyPatch) =>
+          this.getCommandConfirmation(safetyAssessment, command, applyPatch),
         this.execAbortController?.signal,
       );
       outputItem.output = JSON.stringify({ output: outputText, metadata });
@@ -1575,16 +1580,16 @@ export class AgentLoop {
     if (this.canceled) {
       return [];
     }
-    
+
     const turnInput: Array<ResponseInputItem> = [];
-    
+
     // First emit all non-function call items for immediate display
     for (const item of output) {
       if (item.type !== "function_call" && item.type !== "local_shell_call") {
         emitItem(item as ResponseItem);
       }
     }
-    
+
     // Then process function calls one by one
     for (const item of output) {
       if (item.type === "function_call") {
@@ -1592,47 +1597,46 @@ export class AgentLoop {
         if (alreadyProcessedResponses.has(item.id)) {
           continue;
         }
-        
+
         // Mark as processed
         alreadyProcessedResponses.add(item.id);
-        
+
         // Show the function call in the UI
         emitItem(item as ResponseItem);
-        
+
         // Process the function call SYNCHRONOUSLY
         // eslint-disable-next-line no-await-in-loop
         const result = await this.handleFunctionCall(item);
-        
+
         // Add results to turnInput for the next API call
         turnInput.push(...result);
-        
+
         // Also show the function output in the UI
         for (const resultItem of result) {
           emitItem(resultItem as ResponseItem);
         }
-        
       } else if (item.type === "local_shell_call") {
         // Skip already processed shell calls
         const shellId = (item as any).id;
         if (shellId && alreadyProcessedResponses.has(shellId)) {
           continue;
         }
-        
+
         // Mark as processed
         if (shellId) {
           alreadyProcessedResponses.add(shellId);
         }
-        
+
         // Show the shell call in the UI
         emitItem(item as ResponseItem);
-        
+
         // Process the shell call SYNCHRONOUSLY
         // eslint-disable-next-line no-await-in-loop
         const result = await this.handleLocalShellCall(item);
-        
+
         // Add results to turnInput for the next API call
         turnInput.push(...result);
-        
+
         // Also show the shell output in the UI
         for (const resultItem of result) {
           emitItem(resultItem as ResponseItem);
