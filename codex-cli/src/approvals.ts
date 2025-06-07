@@ -158,9 +158,9 @@ export function canAutoApprove(
       if (isFullAutoOrNone(policy)) {
         return {
           type: "auto-approve",
-          reason: `${policy === "full-auto" ? "Full auto" : "None"} mode (unparseable bash command)`,
+          reason: `${policy === "full-auto" ? "Full auto" : "None"} mode (unparsable bash command)`,
           group: "Running commands",
-          runInSandbox: policy === "full-auto", // Keep sandbox for unparseable bash in full-auto, but not in none
+          runInSandbox: policy === "full-auto", // Keep sandbox for unparsable bash in full-auto, but not in none
         };
       } else {
         // For suggest and auto-edit policies
@@ -467,7 +467,7 @@ export function isSafeCommand(
         cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$"))
       )
         return null;
-      return { reason: "List files/List directory", group: "Reading files" };
+      return { reason: "List directory", group: "Searching" };
     },
     dir: (cmdArray: ReadonlyArray<string>) => {
       if (process.platform !== "win32") return null;
@@ -578,12 +578,12 @@ export function isSafeCommand(
       if (!subCommand) return null;
 
       const safeSubCommands: Record<string, string> = {
-        "status": "View status",
-        "diff": "View differences",
-        "log": "View history",
-        "show": "View specific commit/object",
-        "branch": "List branches",
-        "tag": "List tags",
+        status: "View status",
+        diff: "Git diff",
+        log: "Git log",
+        show: "Git show",
+        branch: "List branches",
+        tag: "List tags",
         "rev-parse": "Find commit IDs",
         "shortlog -s -n": "Summarize git log",
       };
@@ -615,9 +615,12 @@ export function isSafeCommand(
           if (cmdArray.slice(2).every((arg) => !arg.startsWith("-")))
             return null;
         }
+        const gitGroup = ["diff", "log", "show"].includes(subCommand)
+          ? "Using git"
+          : "Versioning";
         return {
-          reason: reasonForSubCommand, // Now reasonForSubCommand is confirmed to be a string
-          group: "Versioning",
+          reason: reasonForSubCommand,
+          group: gitGroup,
         };
       }
 
