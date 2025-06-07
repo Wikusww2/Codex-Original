@@ -371,26 +371,19 @@ const NO_API_KEY_REQUIRED = new Set(["ollama"]);
 
 // Skip API key validation for providers that don't require an API key
 if (!apiKey && !NO_API_KEY_REQUIRED.has(provider.toLowerCase())) {
+  const apiKeyName =
+    provider.toLowerCase() === "gemini"
+      ? "GEMINI_API_KEY"
+      : `${provider.toUpperCase()}_API_KEY`;
   // eslint-disable-next-line no-console
   console.error(
     `\n${chalk.red(`Missing ${provider} API key.`)}\n\n` +
-      `Set the environment variable ${chalk.bold(
-        `${provider.toUpperCase()}_API_KEY`,
-      )} ` +
+      `Set the environment variable ${chalk.bold(apiKeyName)} ` +
       `and re-run this command.\n` +
-      `${
-        provider.toLowerCase() === "openai"
-          ? `You can create a key here: ${chalk.bold(
-              chalk.underline("https://platform.openai.com/account/api-keys"),
-            )}\n`
-          : provider.toLowerCase() === "gemini"
-            ? `You can create a ${chalk.bold(
-                `${provider.toUpperCase()}_API_KEY`,
-              )} ` + `in the ${chalk.bold(`Google AI Studio`)}.\n`
-            : `You can create a ${chalk.bold(
-                `${provider.toUpperCase()}_API_KEY`,
-              )} ` + `in the ${chalk.bold(`${provider}`)} dashboard.\n`
-      }`,
+      `You can create a ${chalk.bold(apiKeyName)} ` +
+      `in the ${chalk.bold(
+        `${provider} dashboard or console`,
+      )} (e.g., Google AI Studio for Gemini).\n`,
   );
   process.exit(1);
 }
