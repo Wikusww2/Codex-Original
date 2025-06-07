@@ -153,7 +153,6 @@ export const TerminalChat: React.FC<Props> = ({
   fullStdout,
 }: Props): React.ReactElement => {
   useEffect(() => {
-    // Debug logging disabled
   }, [approvalPolicy]);
 
   const notify = Boolean(config.notify);
@@ -226,13 +225,12 @@ export const TerminalChat: React.FC<Props> = ({
     _initialPromptFromProps,
   );
   const [currentImagePaths, setCurrentImagePaths] = useState(
-    // Renamed state variable
     _initialImagePathsFromProps, // Initialized with the prop value
   );
 
   const agentRef = useRef<AgentLoop | null>(null);
   const initialPromptProcessed = useRef(false);
-  const prevLoadingRef = useRef<boolean>(loading); // Redeclared prevLoadingRef
+  const prevLoadingRef = useRef<boolean>(loading);
 
   const [workdir, setWorkdir] = useState<string>(process.cwd());
 
