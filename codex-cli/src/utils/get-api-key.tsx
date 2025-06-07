@@ -13,7 +13,7 @@ import os from "os";
 import path from "path";
 import React from "react";
 
-function promptUserForChoice(): Promise<Choice> {
+function promptUserForChoice(provider?: string): Promise<Choice> {
   return new Promise<Choice>((resolve) => {
     const instance = render(
       <ApiKeyPrompt
@@ -21,6 +21,7 @@ function promptUserForChoice(): Promise<Choice> {
           resolve(choice);
           instance.unmount();
         }}
+        provider={provider}
       />,
     );
   });
@@ -738,20 +739,46 @@ export async function getApiKey(
   issuer: string,
   clientId: string,
   forceLogin: boolean = false,
+  provider?: string,
 ): Promise<string> {
-  if (!forceLogin && process.env["OPENAI_API_KEY"]) {
+  const effectiveProvider = provider ?? "openai";
+
+  if (
+    !forceLogin &&
+    process.env["OPENAI_API_KEY"] &&
+    effectiveProvider === "openai"
+  ) {
     return process.env["OPENAI_API_KEY"]!;
   }
-  const choice = await promptUserForChoice();
+
+  const choice = await promptUserForChoice(effectiveProvider);
+
   if (choice.type === "apikey") {
-    process.env["OPENAI_API_KEY"] = choice.key;
+    // If the provider is openai, set the OPENAI_API_KEY env var.
+    // For other providers, this function's caller will be responsible for setting
+    // the appropriate environment variable if needed.
+    if (effectiveProvider === "openai") {
+      process.env["OPENAI_API_KEY"] = choice.key;
+    }
     return choice.key;
   }
+
+  // Sign-in flow is currently specific to OpenAI.
+  // If a different provider is specified, and we somehow reach the 'signin' choice,
+  // it's an unsupported scenario with the current setup.
+  if (effectiveProvider !== "openai") {
+    throw new Error(
+      `Interactive sign-in is only supported for OpenAI. For ${effectiveProvider}, please provide the API key directly.`,
+    );
+  }
+
   const spinner = render(<WaitingForAuth />);
   try {
+    // signInFlow is OpenAI-specific.
     const key = await signInFlow(issuer, clientId);
     spinner.clear();
     spinner.unmount();
+    // This function is still primarily handling OPENAI_API_KEY setting internally.
     process.env["OPENAI_API_KEY"] = key;
     return key;
   } catch (err) {
