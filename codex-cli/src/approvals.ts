@@ -463,9 +463,7 @@ export function isSafeCommand(
       group: "Navigating",
     }),
     ls: (cmdArray: ReadonlyArray<string>) => {
-      if (
-        cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$"))
-      )
+      if (cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$")))
         return null;
       return { reason: "List directory", group: "Searching" };
     },
@@ -578,12 +576,12 @@ export function isSafeCommand(
       if (!subCommand) return null;
 
       const safeSubCommands: Record<string, string> = {
-        status: "View status",
-        diff: "Git diff",
-        log: "Git log",
-        show: "Git show",
-        branch: "List branches",
-        tag: "List tags",
+        "status": "View status",
+        "diff": "View differences",
+        "log": "View history",
+        "show": "View specific commit/object",
+        "branch": "List branches",
+        "tag": "List tags",
         "rev-parse": "Find commit IDs",
         "shortlog -s -n": "Summarize git log",
       };
@@ -619,7 +617,7 @@ export function isSafeCommand(
           ? "Using git"
           : "Versioning";
         return {
-          reason: reasonForSubCommand,
+          reason: reasonForSubCommand, // Now reasonForSubCommand is confirmed to be a string
           group: gitGroup,
         };
       }

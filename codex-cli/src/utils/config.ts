@@ -45,7 +45,7 @@ if (!isVitest) {
 
 export const DEFAULT_AGENTIC_MODEL = "codex-mini-latest";
 export const DEFAULT_FULL_CONTEXT_MODEL = "gpt-4.1";
-export const DEFAULT_APPROVAL_MODE = AutoApprovalMode.SUGGEST;
+export const DEFAULT_APPROVAL_MODE = AutoApprovalMode.NONE;
 export const DEFAULT_INSTRUCTIONS = "";
 
 // Default shell output limits

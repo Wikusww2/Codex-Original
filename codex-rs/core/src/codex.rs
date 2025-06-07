@@ -1277,16 +1277,7 @@ async fn handle_container_exec_with_params(
         }
         Err(CodexErr::Sandbox(error)) => {
             // Pass the same final_sandbox_policy_for_exec to the error handler
-            handle_sandbox_error(
-                error,
-                final_sandbox_type_for_exec,
-                params,
-                sess,
-                sub_id,
-                call_id,
-                &final_sandbox_policy_for_exec,
-            )
-            .await
+            handle_sandbox_error(error, final_sandbox_type_for_exec, params, sess, sub_id, call_id, &final_sandbox_policy_for_exec).await
         }
         Err(e) => {
             // Handle non-sandbox errors
@@ -1313,9 +1304,7 @@ async fn handle_sandbox_error(
     // Early out if the user never wants to be asked for approval; just return to the model immediately
     // If approval policy is BypassPolicyAndNeverAsk, sandbox errors should ideally not occur if the bypass was effective.
     // However, if one does, or if it's 'Never', we don't escalate to user.
-    if sess.approval_policy == AskForApproval::Never
-        || sess.approval_policy == AskForApproval::BypassPolicyAndNeverAsk
-    {
+    if sess.approval_policy == AskForApproval::Never || sess.approval_policy == AskForApproval::BypassPolicyAndNeverAsk {
         return ResponseInputItem::FunctionCallOutput {
             call_id,
             output: FunctionCallOutputPayload {
