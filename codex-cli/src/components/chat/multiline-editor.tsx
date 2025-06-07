@@ -53,14 +53,6 @@ proto["emit"] = function patchedEmit(
 ): boolean {
   if (event === "data") {
     const chunk = args[0] as string;
-
-    if (
-      process.env["TEXTBUFFER_DEBUG"] === "1" ||
-      process.env["TEXTBUFFER_DEBUG"] === "true"
-    ) {
-      // eslint-disable-next-line no-console
-      console.log("[MultilineTextEditor:stdin] data", JSON.stringify(chunk));
-    }
     // Store carriage returns as‑is so that Ink can distinguish between plain
     // <Enter> ("\r") and a bare line‑feed ("\n").  This matters because Ink's
     // `parseKeypress` treats "\r" as key.name === "return", whereas "\n" maps
@@ -201,14 +193,6 @@ const MultilineTextEditorInner = (
     (input, key) => {
       if (!focus) {
         return;
-      }
-
-      if (
-        process.env["TEXTBUFFER_DEBUG"] === "1" ||
-        process.env["TEXTBUFFER_DEBUG"] === "true"
-      ) {
-        // eslint-disable-next-line no-console
-        console.log("[MultilineTextEditor] event", { input, key });
       }
 
       // 1a) CSI-u / modifyOtherKeys *mode 2* (Ink strips initial ESC, so we
