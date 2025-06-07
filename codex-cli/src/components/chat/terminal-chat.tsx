@@ -232,7 +232,7 @@ export const TerminalChat: React.FC<Props> = ({
 
   const agentRef = useRef<AgentLoop | null>(null);
   const initialPromptProcessed = useRef(false);
-  const prevLoadingRef = useRef<boolean>(loading); // Re-declared prevLoadingRef
+  const prevLoadingRef = useRef<boolean>(loading); // Redeclared prevLoadingRef
 
   const [workdir, setWorkdir] = useState<string>(process.cwd());
 
