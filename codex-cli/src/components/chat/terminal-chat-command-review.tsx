@@ -1,5 +1,6 @@
-import { ReviewDecision } from "../../utils/agent/review";
 import type { ConfirmationResult } from "../../hooks/use-confirmation.js";
+
+import { ReviewDecision } from "../../utils/agent/review";
 // TODO: figure out why `cli-spinners` fails on Node v20.9.0
 // which is why we have to do this in the first place
 //

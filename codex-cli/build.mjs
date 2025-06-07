@@ -2,6 +2,7 @@ import * as esbuild from "esbuild";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { execSync } from "child_process";
 
 const SRC_DIR = path.resolve("./src");
 
@@ -44,7 +45,75 @@ const ignoreReactDevToolsPlugin = {
   },
 };
 
-const plugins = [ignoreReactDevToolsPlugin]; // Initialize with the plugin
+const inkResolverPlugin = {
+  name: "ink-resolver",
+  setup(build) {
+    const inkSourcePath = path.resolve(".ink-source-for-build");
+    const inkBuildPath = path.join(inkSourcePath, "build");
+
+    // Resolve 'ink' itself to our temporary source
+    build.onResolve({ filter: /^ink$/ }, args => {
+      return { path: path.join(inkBuildPath, "index.js") };
+    });
+
+    // Resolve relative paths like './components/Box.js' originating from Ink files
+    build.onResolve({ filter: /^\.\.?\// }, async (args) => {
+      const normImporter = path.normalize(args.importer);
+      const inkBuildRootNodeModules = path.normalize(path.resolve(process.cwd(), 'node_modules/ink/build'));
+      // Use inkBuildPath which is defined in the plugin setup as path.join(inkSourcePath, 'build')
+      // This correctly points to '.ink-source-for-build/build'
+      const inkBuildRootSourceFromPatch = path.normalize(inkBuildPath); 
+
+      let isImporterAnInkFile = false;
+      let baseResolveDirForRelativeInkImport = null;
+
+      // Scenario 1: Importer is like '.../node_modules/ink/build/index.js'
+      if (normImporter.startsWith(inkBuildRootNodeModules)) {
+        isImporterAnInkFile = true;
+        // Determine the sub-path relative to 'node_modules/ink/build' (e.g., '.' for index.js, or 'components' if importer was '.../node_modules/ink/build/components/SomeComponent.js')
+        const relativeSubPath = path.relative(inkBuildRootNodeModules, path.dirname(normImporter));
+        // The base for resolving args.path should be the corresponding directory in our patched source
+        baseResolveDirForRelativeInkImport = path.join(inkBuildRootSourceFromPatch, relativeSubPath);
+      } 
+      // Scenario 2: Importer is already within our patched source, e.g., '.../.ink-source-for-build/build/ink.js'
+      else if (normImporter.startsWith(inkBuildRootSourceFromPatch)) { 
+        isImporterAnInkFile = true;
+        // Resolve relative to the importer's actual directory within the patched source
+        baseResolveDirForRelativeInkImport = path.dirname(normImporter);
+      }
+
+      if (isImporterAnInkFile) {
+        const targetPath = path.resolve(baseResolveDirForRelativeInkImport, args.path);
+
+        const checkAndResolve = (p) => {
+          const pJs = p + '.js';
+          const pMjs = p + '.mjs';
+          if (fs.existsSync(p) && fs.statSync(p).isFile()) return { path: p };
+          if (fs.existsSync(pJs) && fs.statSync(pJs).isFile()) return { path: pJs };
+          if (fs.existsSync(pMjs) && fs.statSync(pMjs).isFile()) return { path: pMjs };
+          // Check for directory with index file (e.g., './components/')
+          if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+            const pIndexJs = path.join(p, 'index.js');
+            const pIndexMjs = path.join(p, 'index.mjs');
+            if (fs.existsSync(pIndexJs) && fs.statSync(pIndexJs).isFile()) return { path: pIndexJs };
+            if (fs.existsSync(pIndexMjs) && fs.statSync(pIndexMjs).isFile()) return { path: pIndexMjs };
+          }
+          return null;
+        };
+
+        const resolved = checkAndResolve(targetPath);
+        if (resolved) {
+          console.log(`[ink-resolver] Relative: '${args.path}' (from '${args.importer}') -> '${resolved.path}'`);
+          return resolved;
+        }
+        // console.warn(`[ink-resolver] Failed to resolve relative Ink path '${args.path}' from '${args.importer}' against base '${baseResolveDirForRelativeInkImport}' (target: ${targetPath})`);
+      }
+      return undefined; // Let esbuild handle other relative imports
+    });
+  }
+};
+
+const plugins = [ignoreReactDevToolsPlugin, inkResolverPlugin]; // Initialize with plugins
 
 // ----------------------------------------------------------------------------
 // Build mode detection (production vs development)
@@ -77,15 +146,17 @@ const prodBuildOptions = {
   outfile: path.resolve(OUT_DIR, isDevBuild ? "cli-dev.js" : "cli.js"),
   minify: !isDevBuild,
   keepNames: true, // Prevent mangling of names, e.g. for enums
-  sourcemap: isDevBuild ? "inline" : true,
+  sourcemap: false, // Was: isDevBuild ? "inline" : true,
   plugins,
   define: {
     __BUILD_ID__: JSON.stringify(String(Date.now())), // Dynamic build ID
   },
   inject: ["./require-shim.js"], // Restore inject
-  external: ["../package.json"],
+  external: ["../package.json", "encoding", "iconv-lite", "es-toolkit"],
+  conditions: ["node", "node-addons", "import"],
+  resolveExtensions: [".tsx", ".ts", ".jsx", ".js", ".css", ".json", ".mjs"],
   treeShaking: false, // Keep for prod, or decide later
-  // logLevel: 'debug', // Keep for prod if needed
+  logLevel: 'debug',
   // drop: [], // Keep for prod if needed
 };
 
@@ -107,7 +178,17 @@ async function build() {
   //   } // Temporarily disabled
   // } // Temporarily disabled
 
+  const inkSourcePath = path.resolve(".ink-source-for-build");
   try {
+    console.log(`[build.mjs] Assuming Ink source is already prepared in: ${inkSourcePath}`);
+    // Verify extraction by checking for a key file
+    const expectedInkFile = path.join(inkSourcePath, 'build', 'index.js');
+    if (!fs.existsSync(inkSourcePath) || !fs.existsSync(expectedInkFile)) {
+      console.error(`[build.mjs] CRITICAL: Ink source directory '.ink-source-for-build' or key file '${expectedInkFile}' not found. Please prepare it manually using 'pnpm patch ink@5.2.1 --edit-dir=.ink-source-for-build' and then stop the patch command.`);
+      throw new Error('Ink source not found or incomplete.');
+    }
+    console.log(`[build.mjs] Ink source successfully located and verified (found ${expectedInkFile}).`);
+
     // fs.renameSync(originalCliTsxPath, tempCliTsxPath); // Temporarily disabled
     // console.log(`[build.mjs] Renamed ${originalCliTsxPath} to ${tempCliTsxPath}`); // Temporarily disabled
 
@@ -148,7 +229,7 @@ async function build() {
         entryPoints: [originalCliTsxPath], // Using original path directly
         outfile: path.resolve(OUT_DIR, "cli.js"), // Force cli.js as output regardless of build mode
         minify: true, // Ensure prod minify is true
-        sourcemap: true, // Ensure prod sourcemap is true (or 'external')
+        sourcemap: false, // Ensure prod sourcemap is false
       };
     }
 
@@ -180,16 +261,44 @@ async function build() {
       JSON.stringify(currentBuildOptions, null, 2),
     );
     const result = await esbuild.build(currentBuildOptions);
-    if (isDevBuild && result.errors && result.errors.length > 0) {
+    // Log warnings and errors from esbuild regardless of build mode
+    if (result.warnings && result.warnings.length > 0) {
+      console.warn(
+        "[build.mjs] esbuild reported warnings:",
+        JSON.stringify(result.warnings, null, 2),
+      );
+    }
+    if (result.errors && result.errors.length > 0) {
       console.error(
         "[build.mjs] esbuild reported errors:",
         JSON.stringify(result.errors, null, 2),
       );
-      console.log(
-        "[build.mjs] Forcing exit due to esbuild errors (dev build).",
+      console.error(
+        "[build.mjs] Forcing exit due to esbuild errors.",
       );
-      process.exit(1);
+      process.exit(1); // Exit for errors in any build mode
     }
+
+    // --- Add this check ---
+    if (!result.errors || result.errors.length === 0) {
+        const expectedOutfile = currentBuildOptions.outfile;
+        if (expectedOutfile && fs.existsSync(expectedOutfile)) {
+            const stats = fs.statSync(expectedOutfile);
+            if (stats.size > 0) {
+                console.log(`[build.mjs] esbuild build successful. Output file: ${expectedOutfile} (Size: ${stats.size} bytes)`);
+                const markerFilePath = path.resolve(OUT_DIR, "build_marker.txt");
+                fs.writeFileSync(markerFilePath, "Build script 'build.mjs' believes it completed successfully at " + new Date().toISOString());
+                console.log(`[build.mjs] Created marker file: ${markerFilePath}`);
+            } else {
+                console.error(`[build.mjs] CRITICAL ERROR: esbuild completed without errors, but output file ${expectedOutfile} is EMPTY.`);
+                process.exit(1);
+            }
+        } else {
+            console.error(`[build.mjs] CRITICAL ERROR: esbuild completed without errors, but output file ${expectedOutfile} was NOT CREATED.`);
+            process.exit(1);
+        }
+    }
+    // --- End of added check ---
     console.log(
       `[build.mjs] esbuild.build() promise resolved for ${currentBuildOptions.outfile}`,
     );
@@ -238,10 +347,30 @@ async function build() {
     }
     console.log("[build.mjs] esbuild build successful.");
   } catch (error) {
-    console.error("[build.mjs] Build failed in catch block:", error);
-    console.log("[build.mjs] Forcing exit due to error in catch block.");
-    process.exit(1); // Force exit on error
+    console.error("[build.mjs] Build failed. Detailed error information will be written to esbuild-error-details.json");
+    const errorDetails = {
+      message: error.message,
+      stack: error.stack,
+      properties: JSON.parse(JSON.stringify(error, Object.getOwnPropertyNames(error))), // Deep clone to capture all properties
+      esbuildErrors: (error && error.errors && Array.isArray(error.errors)) ? error.errors : undefined,
+      esbuildWarnings: (error && error.warnings && Array.isArray(error.warnings)) ? error.warnings : undefined,
+    };
+    try {
+      fs.writeFileSync(path.resolve("./esbuild-error-details.json"), JSON.stringify(errorDetails, null, 2));
+      console.log("[build.mjs] Successfully wrote error details to esbuild-error-details.json");
+    } catch (writeError) {
+      console.error("[build.mjs] Failed to write error details to file:", writeError);
+    }
+    console.log("[build.mjs] Forcing exit due to error. Waiting 100ms for logs to flush...");
+    setTimeout(() => {
+      process.exit(1); // Force exit on error
+    }, 100);
   } finally {
+    // Temporarily disabled cleanup of inkSourcePath for manual testing
+    // if (fs.existsSync(inkSourcePath)) {
+    //   console.log(`[build.mjs] Cleaning up Ink source directory: ${inkSourcePath}`);
+    //   fs.rmSync(inkSourcePath, { recursive: true, force: true });
+    // }
     console.log(
       "[build.mjs] File renaming logic in 'finally' block is temporarily disabled.",
     );

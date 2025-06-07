@@ -41,7 +41,6 @@ describe("/clear command", () => {
     ] as Array<any>;
 
     const props: ComponentProps<typeof TerminalChatInput> = {
-      isNew: false,
       loading: false,
       submitInput: () => {},
       confirmationPrompt: null,

@@ -207,11 +207,6 @@ function convertSummaryToResult(
   // This is the most compatible format based on the error messages
   const outputText = rawOutput;
 
-  // Log the output format for debugging
-  console.log(
-    `[convertSummaryToResult] Formatting command output as plain text: ${outputText.substring(0, 100)}${outputText.length > 100 ? "..." : ""}`,
-  );
-
   return {
     outputText,
     metadata: {

@@ -359,6 +359,8 @@ export class AgentLoop {
         httpAgent: PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : undefined,
         ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
       });
+    } else {
+      this.oai = new OpenAI(commonOptions);
     }
 
     setSessionId(this.sessionId);
@@ -1225,7 +1227,7 @@ export class AgentLoop {
               );
               // eslint-disable-next-line no-await-in-loop
               stream = await responseCall({
-                model: modelForApi,
+                model: this.model,
                 instructions: mergedInstructions,
                 input: turnInput,
                 stream: true,

@@ -20,7 +20,6 @@ import { PATCH_SUFFIX } from "src/parse-apply-patch.js";
 const DEFAULT_TIMEOUT_MS = 60_000; // 60 seconds - increased to allow more complex operations
 
 export function requiresShell(cmd: Array<string>): boolean {
-  console.log(`[requiresShell] invoked with cmd: ${JSON.stringify(cmd)}`);
   const firstCommand = cmd[0]?.toLowerCase();
 
   if (process.platform === "win32") {
@@ -129,13 +128,7 @@ export function requiresShell(cmd: Array<string>): boolean {
       "rename-item",
       "new-item",
     ];
-    console.log(
-      `[requiresShell] platform: ${process.platform}, firstCommand: ${firstCommand}`,
-    );
     if (firstCommand && windowsBuiltIns.includes(firstCommand)) {
-      console.log(
-        `[requiresShell] Matched Windows built-in: ${firstCommand}. Returning true.`,
-      );
       return true;
     }
   }
@@ -149,16 +142,12 @@ export function requiresShell(cmd: Array<string>): boolean {
     const needsShellForOperator = tokens.some(
       (token) => typeof token === "object" && "op" in token,
     );
-    console.log(
-      `[requiresShell] Needs shell for operator: ${needsShellForOperator}`,
-    );
     return needsShellForOperator;
   }
 
   // If the command is split into multiple arguments (and not a Windows built-in from above),
   // we don't need shell: true even if one of the arguments is a shell operator like '|'.
   // The individual program would handle its arguments.
-  console.log("[requiresShell] No shell needed by default. Returning false.");
   return false;
 }
 
