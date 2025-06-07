@@ -1,28 +1,36 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import { Box, Text, useInput, useApp } from "ink";
-import MultilineTextEditor, { type MultilineTextEditorHandle } from "./multiline-editor"; 
-import { clearTerminal } from "../../utils/terminal"; 
-import {
-  SLASH_COMMANDS,
-  type SlashCommand, 
-} from "../../utils/slash-commands"; 
-import TextCompletions from "./terminal-chat-completions"; 
+import MultilineTextEditor, {
+  type MultilineTextEditorHandle,
+} from "./multiline-editor";
+import { clearTerminal } from "../../utils/terminal";
+import { SLASH_COMMANDS, type SlashCommand } from "../../utils/slash-commands";
+import TextCompletions from "./terminal-chat-completions";
 import { TerminalChatCommandReview } from "./terminal-chat-command-review";
 import type {
   ConfirmationResult,
-  // ConfirmationPrompt, 
-} from "../../hooks/use-confirmation"; 
-import { createInputItem, type ResponseInputItem } from "../../utils/input-utils"; 
+  // ConfirmationPrompt,
+} from "../../hooks/use-confirmation";
+import {
+  createInputItem,
+  type ResponseInputItem,
+} from "../../utils/input-utils";
 import {
   loadCommandHistory,
   addToHistory,
   type HistoryEntry,
-} from "../../utils/storage/command-history"; 
+} from "../../utils/storage/command-history";
 import {
   getFileSystemSuggestions,
   type FileSystemSuggestion,
-} from "../../utils/file-system-suggestions"; 
-import { expandFileTags } from "../../utils/file-tag-utils"; 
+} from "../../utils/file-system-suggestions";
+import { expandFileTags } from "../../utils/file-tag-utils";
 
 export interface TerminalChatInputProps {
   loading: boolean;
@@ -31,7 +39,7 @@ export interface TerminalChatInputProps {
   explanation?: string;
   submitConfirmation: (result: ConfirmationResult) => void;
   setLastResponseId: (id: string) => void;
-  setItems: any; 
+  setItems: any;
   openOverlay: () => void;
   openModelOverlay: () => void;
   openProviderOverlay: () => void;
@@ -40,7 +48,7 @@ export interface TerminalChatInputProps {
   openDiffOverlay: () => void;
   openSessionsOverlay: () => void;
   onCompact: () => void;
-  items: Array<any>; 
+  items: Array<any>;
   workdir?: string;
 }
 
@@ -88,12 +96,14 @@ export default function TerminalChatInput({
     }
     // Match commands that start with the typed query after '/'
     // or show all commands if only '/' is typed or '/ ' (with space)
-    const query = input.length > 1 ? input.substring(1).toLowerCase().trimStart() : "";
-    if (query === "") { // If only '/' or '/ ' is typed, show all commands
-        return SLASH_COMMANDS; 
+    const query =
+      input.length > 1 ? input.substring(1).toLowerCase().trimStart() : "";
+    if (query === "") {
+      // If only '/' or '/ ' is typed, show all commands
+      return SLASH_COMMANDS;
     }
-    return SLASH_COMMANDS.filter(
-      (cmd) => cmd.command.toLowerCase().startsWith(query) 
+    return SLASH_COMMANDS.filter((cmd) =>
+      cmd.command.toLowerCase().startsWith(query),
     );
   }, [input]);
 
@@ -105,7 +115,7 @@ export default function TerminalChatInput({
     // Adjust selectedSlashSuggestion when completions change
     if (slashCommandCompletions.length > 0) {
       setSelectedSlashSuggestion((prev) =>
-        Math.min(Math.max(0, prev), slashCommandCompletions.length - 1)
+        Math.min(Math.max(0, prev), slashCommandCompletions.length - 1),
       );
     } else {
       setSelectedSlashSuggestion(0); // Or -1 if no selection desired when empty
@@ -114,14 +124,14 @@ export default function TerminalChatInput({
 
   useEffect(() => {
     async function doLoadHistory() {
-      setHistory(await loadCommandHistory()); 
+      setHistory(await loadCommandHistory());
     }
     doLoadHistory();
   }, []);
 
   const updateFsSuggestions = useCallback(
     (txt: string, alwaysUpdateSelection: boolean = false) => {
-      const suggestions = getFileSystemSuggestions(txt); 
+      const suggestions = getFileSystemSuggestions(txt);
       setFsSuggestions(suggestions);
       if (alwaysUpdateSelection || selectedCompletion >= suggestions.length) {
         setSelectedCompletion(suggestions.length > 0 ? 0 : -1);
@@ -130,7 +140,7 @@ export default function TerminalChatInput({
     [selectedCompletion],
   );
 
-  const loadHistory = useCallback(async () => { 
+  const loadHistory = useCallback(async () => {
     setHistory(await loadCommandHistory());
   }, []);
 
@@ -156,7 +166,7 @@ export default function TerminalChatInput({
       const trimmedValue = value.trim();
       if (!trimmedValue) return;
 
-      await addToHistory(trimmedValue, history); 
+      await addToHistory(trimmedValue, history);
       await loadHistory();
       setHistoryIndex(null);
       setInput("");
@@ -169,24 +179,24 @@ export default function TerminalChatInput({
         const commandArgs = slashCommandMatch[2];
         // Extract just the command part without the slash for comparison
         const command = SLASH_COMMANDS.find(
-          (cmd: SlashCommand) => cmd.command.substring(1) === commandName
+          (cmd: SlashCommand) => cmd.command.substring(1) === commandName,
         );
 
         if (command) {
-          if (command.command === "/exit" || command.command === "/quit") { 
+          if (command.command === "/exit" || command.command === "/quit") {
             clearTerminal();
             app.exit();
             process.exit(0);
           }
-          if (command.command === "/clear") { 
+          if (command.command === "/clear") {
             setItems([]);
             return;
           }
-          if (command.command === "/compact") { 
+          if (command.command === "/compact") {
             onCompact();
             return;
           }
-          if (command.command === "/help") { 
+          if (command.command === "/help") {
             openHelpOverlay();
             return;
           }
@@ -202,11 +212,11 @@ export default function TerminalChatInput({
             openApprovalOverlay();
             return;
           }
-          if (command.command === "/sessions") { 
+          if (command.command === "/sessions") {
             openSessionsOverlay();
             return;
           }
-          if (command.command === "/bug") { 
+          if (command.command === "/bug") {
             const { default: os } = await import("node:os");
             const { version: cliVersion } = await import(
               "../../../package.json"
@@ -236,8 +246,8 @@ export default function TerminalChatInput({
         }
       }
 
-      const expandedValue = await expandFileTags(trimmedValue); 
-      submitInput([await createInputItem(expandedValue, [])]); 
+      const expandedValue = await expandFileTags(trimmedValue);
+      submitInput([await createInputItem(expandedValue, [])]);
     },
     [
       skipNextSubmit,
@@ -254,7 +264,7 @@ export default function TerminalChatInput({
       loadHistory,
       workdir,
       items,
-      history, 
+      history,
     ],
   );
 
@@ -275,18 +285,21 @@ export default function TerminalChatInput({
       if (input.startsWith("/") && slashCommandCompletions.length > 0) {
         if (key.upArrow) {
           setSelectedSlashSuggestion((prev) =>
-            prev > 0 ? prev - 1 : slashCommandCompletions.length - 1
+            prev > 0 ? prev - 1 : slashCommandCompletions.length - 1,
           );
           setSkipNextSubmit(true);
           return;
         } else if (key.downArrow) {
           setSelectedSlashSuggestion((prev) =>
-            prev < slashCommandCompletions.length - 1 ? prev + 1 : 0
+            prev < slashCommandCompletions.length - 1 ? prev + 1 : 0,
           );
           setSkipNextSubmit(true);
           return;
-        } else if (key.return || key.tab) { 
-          if (selectedSlashSuggestion >= 0 && selectedSlashSuggestion < slashCommandCompletions.length) {
+        } else if (key.return || key.tab) {
+          if (
+            selectedSlashSuggestion >= 0 &&
+            selectedSlashSuggestion < slashCommandCompletions.length
+          ) {
             const command = slashCommandCompletions[selectedSlashSuggestion];
             const newText = `/${command} `;
             setInput(newText);
@@ -294,8 +307,8 @@ export default function TerminalChatInput({
               key: prev.key + 1,
               initialCursorOffset: newText.length,
             }));
-            setSelectedSlashSuggestion(0); 
-            setSkipNextSubmit(true); 
+            setSelectedSlashSuggestion(0);
+            setSkipNextSubmit(true);
             return;
           }
         }
@@ -326,7 +339,7 @@ export default function TerminalChatInput({
       } else if (key.downArrow) {
         if (fsSuggestions.length > 0 && selectedCompletion > -1) {
           setSelectedCompletion((prev) =>
-            Math.min(fsSuggestions.length - 1, prev + 1)
+            Math.min(fsSuggestions.length - 1, prev + 1),
           );
         } else if (historyIndex !== null && historyIndex < history.length - 1) {
           const newIndex = historyIndex + 1;
@@ -337,7 +350,10 @@ export default function TerminalChatInput({
             key: prev.key + 1,
             initialCursorOffset: newCmd.length,
           }));
-        } else if (historyIndex !== null && historyIndex === history.length - 1) {
+        } else if (
+          historyIndex !== null &&
+          historyIndex === history.length - 1
+        ) {
           setHistoryIndex(null);
           setInput(draftInput);
           setEditorState((prev) => ({
@@ -350,7 +366,7 @@ export default function TerminalChatInput({
         if (fsSuggestions.length > 0 && selectedCompletion > -1) {
           const suggestion = fsSuggestions[selectedCompletion];
           if (suggestion) {
-            setInput(suggestion.path); 
+            setInput(suggestion.path);
             setEditorState((prev) => ({
               key: prev.key + 1,
               initialCursorOffset: suggestion.path.length,
@@ -376,23 +392,25 @@ export default function TerminalChatInput({
       isActive:
         !loading &&
         !confirmationPrompt &&
-        (fsSuggestions.length > 0 || history.length > 0 || slashCommandCompletions.length > 0),
+        (fsSuggestions.length > 0 ||
+          history.length > 0 ||
+          slashCommandCompletions.length > 0),
     },
   );
 
   useEffect(() => {}, []);
 
   if (loading && !confirmationPrompt) {
-    return <Text>Loading...</Text>; 
+    return <Text>Loading...</Text>;
   }
 
   if (confirmationPrompt) {
     return (
-      <TerminalChatCommandReview 
+      <TerminalChatCommandReview
         explanation={explanation}
         confirmationPrompt={confirmationPrompt}
         onReviewCommand={submitConfirmation}
-        onSwitchApprovalMode={openApprovalOverlay} 
+        onSwitchApprovalMode={openApprovalOverlay}
       />
     );
   }
@@ -403,20 +421,20 @@ export default function TerminalChatInput({
         <Box flexDirection="column">
           {fsSuggestions.map((suggestion, index) => (
             <Text
-              key={suggestion.path} 
+              key={suggestion.path}
               color={selectedCompletion === index ? "blue" : "gray"}
             >
               {selectedCompletion === index ? "❯ " : "  "}
-              {suggestion.path} 
+              {suggestion.path}
             </Text>
           ))}
         </Box>
       )}
       <Box borderStyle="round" paddingX={1} borderColor="blue">
-        <MultilineTextEditor 
+        <MultilineTextEditor
           key={editorState.key}
           ref={editorRef}
-          initialText={input} 
+          initialText={input}
           initialCursorOffset={editorState.initialCursorOffset}
           focus={!loading && !confirmationPrompt}
           onSubmit={handleSubmit}
@@ -424,10 +442,10 @@ export default function TerminalChatInput({
         />
       </Box>
       {input.startsWith("/") && slashCommandCompletions.length > 0 && (
-        <TextCompletions 
-          completions={slashCommandCompletions} 
-          selectedCompletion={selectedSlashSuggestion} 
-          displayLimit={5} 
+        <TextCompletions
+          completions={slashCommandCompletions}
+          selectedCompletion={selectedSlashSuggestion}
+          displayLimit={5}
         />
       )}
     </Box>

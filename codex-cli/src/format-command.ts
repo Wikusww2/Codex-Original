@@ -5,7 +5,9 @@ import { quote } from "shell-quote";
  * this to doing `args.join(" ")` as this will handle quoting and escaping
  * correctly. See unit test for details.
  */
-export function formatCommandForDisplay(command: Array<string> | undefined): string {
+export function formatCommandForDisplay(
+  command: Array<string> | undefined,
+): string {
   // Guard against undefined or null command arrays
   if (!command) {
     return "";

@@ -150,7 +150,10 @@ export function TerminalChatCommandReview({
         if (key.return) {
           // if user hit enter on empty msg, fall back to DEFAULT_DENY_MESSAGE
           const custom = msg.trim() === "" ? DEFAULT_DENY_MESSAGE : msg;
-          onReviewCommand({ decision: ReviewDecision.NO_CONTINUE, customDenyMessage: custom });
+          onReviewCommand({
+            decision: ReviewDecision.NO_CONTINUE,
+            customDenyMessage: custom,
+          });
         } else if (key.escape) {
           // treat escape as denial with default message as well
           onReviewCommand({
@@ -211,7 +214,9 @@ export function TerminalChatCommandReview({
               <Select
                 isDisabled={!isActive}
                 visibleOptionCount={approvalOptions.length}
-                onChange={(value: ReviewDecision | "edit" | "switch" | "explain") => {
+                onChange={(
+                  value: ReviewDecision | "edit" | "switch" | "explain",
+                ) => {
                   if (value === "edit") {
                     setMode("input");
                   } else if (value === "switch") {

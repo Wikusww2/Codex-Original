@@ -45,7 +45,11 @@ export default function TerminalChatResponseItem({
     case "local_shell_call":
     case "function_call":
       // Cast to appropriate type since these item types may not be in the SDK type definitions yet
-      return <TerminalChatResponseToolCall message={item as ResponseFunctionToolCallItem} />;
+      return (
+        <TerminalChatResponseToolCall
+          message={item as ResponseFunctionToolCallItem}
+        />
+      );
     case "local_shell_call_output":
     case "function_call_output":
       // Cast to appropriate type since these item types may not be in the SDK type definitions yet
@@ -258,7 +262,9 @@ function TerminalChatResponseToolCallOutput({
         </Text>
       </Box>
       <Box width="100%" overflow="hidden">
-        <Text dimColor wrap="wrap">{colorizedContent}</Text>
+        <Text dimColor wrap="wrap">
+          {colorizedContent}
+        </Text>
       </Box>
     </Box>
   );

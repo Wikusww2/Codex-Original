@@ -19,7 +19,11 @@ if (major < 22) {
 (process as any).noDeprecation = true;
 
 import type { AppRollout } from "./app";
-import type { ApprovalPolicy, ApplyPatchCommand, SafetyAssessment } from "./approvals";
+import type {
+  ApprovalPolicy,
+  ApplyPatchCommand,
+  SafetyAssessment,
+} from "./approvals";
 import type { CommandConfirmation } from "./utils/agent/agent-loop";
 import type { AppConfig } from "./utils/config";
 import type { ResponseItem } from "openai/resources/responses/responses";
@@ -669,7 +673,7 @@ async function runQuietMode({
     getCommandConfirmation: async (
       _safetyAssessment: SafetyAssessment,
       command: string[],
-      _applyPatch: ApplyPatchCommand | undefined
+      _applyPatch: ApplyPatchCommand | undefined,
     ): Promise<CommandConfirmation> => {
       // In quiet mode, default to NO_CONTINUE, except when in full-auto mode
       const reviewDecision =
@@ -677,7 +681,10 @@ async function runQuietMode({
           ? ReviewDecision.YES
           : ReviewDecision.NO_CONTINUE;
       // Return with modifiedCommand to match the expected return type
-      return Promise.resolve({ review: reviewDecision, modifiedCommand: command });
+      return Promise.resolve({
+        review: reviewDecision,
+        modifiedCommand: command,
+      });
     },
     onLastResponseId: () => {
       /* intentionally ignored in quiet mode */

@@ -28,27 +28,114 @@ export function requiresShell(cmd: Array<string>): boolean {
     // but covers many common commands that would be translated from Unix-like systems
     // or used directly.
     const windowsBuiltIns = [
-      "assoc", "attrib", "break", "bcdedit", "cacls", "call", "cd", "chcp", "chdir", "chkdsk", "chkntfs",
-      "cls", "cmd", "color", "comp", "compact", "convert", "copy", "date", "del", "dir", "diskcomp",
-      "diskcopy", "diskpart", "doskey", "driverquery", "echo", "endlocal", "erase", "fc", "find",
-      "findstr", "for", "format", "fsutil", "ftype", "goto", "gpresult", "graftabl", "help", "icacls",
-      "if", "label", "md", "mkdir", "mklink", "mode", "more", "move", "openfiles", "path", "pause",
-      "popd", "print", "prompt", "pushd", "rd", "recover", "rem", "ren", "rename", "replace",
-      "rmdir", "robocopy", "set", "setlocal", "sc", "schtasks", "shift", "shutdown", "sort", "start",
-      "subst", "systeminfo", "tasklist", "taskkill", "time", "title", "tree", "type", "ver", "verify",
-      "vol", "xcopy",
+      "assoc",
+      "attrib",
+      "break",
+      "bcdedit",
+      "cacls",
+      "call",
+      "cd",
+      "chcp",
+      "chdir",
+      "chkdsk",
+      "chkntfs",
+      "cls",
+      "cmd",
+      "color",
+      "comp",
+      "compact",
+      "convert",
+      "copy",
+      "date",
+      "del",
+      "dir",
+      "diskcomp",
+      "diskcopy",
+      "diskpart",
+      "doskey",
+      "driverquery",
+      "echo",
+      "endlocal",
+      "erase",
+      "fc",
+      "find",
+      "findstr",
+      "for",
+      "format",
+      "fsutil",
+      "ftype",
+      "goto",
+      "gpresult",
+      "graftabl",
+      "help",
+      "icacls",
+      "if",
+      "label",
+      "md",
+      "mkdir",
+      "mklink",
+      "mode",
+      "more",
+      "move",
+      "openfiles",
+      "path",
+      "pause",
+      "popd",
+      "print",
+      "prompt",
+      "pushd",
+      "rd",
+      "recover",
+      "rem",
+      "ren",
+      "rename",
+      "replace",
+      "rmdir",
+      "robocopy",
+      "set",
+      "setlocal",
+      "sc",
+      "schtasks",
+      "shift",
+      "shutdown",
+      "sort",
+      "start",
+      "subst",
+      "systeminfo",
+      "tasklist",
+      "taskkill",
+      "time",
+      "title",
+      "tree",
+      "type",
+      "ver",
+      "verify",
+      "vol",
+      "xcopy",
       // Add PowerShell to the list of commands that require a shell
-      "powershell", "pwsh",
+      "powershell",
+      "pwsh",
       // Common PowerShell cmdlets/aliases that might be invoked if cmd.exe is the shell.
       // While `shell: true` on Windows defaults to `cmd.exe`, if a user's PATH
       // somehow led to PowerShell being invoked for these, this helps.
       // However, the primary target here is `cmd.exe` built-ins.
-      "get-childitem", "select-string", "get-content", "set-content",
-      "remove-item", "copy-item", "move-item", "rename-item", "new-item"
+      "get-childitem",
+      "select-string",
+      "get-content",
+      "set-content",
+      "remove-item",
+      "copy-item",
+      "move-item",
+      "rename-item",
+      "new-item",
     ];
-    console.log(`[requiresShell] platform: ${process.platform}, firstCommand: ${firstCommand}`);
+    console.log(
+      `[requiresShell] platform: ${process.platform}, firstCommand: ${firstCommand}`,
+    );
     if (firstCommand && windowsBuiltIns.includes(firstCommand)) {
-      console.log(`[requiresShell] Matched Windows built-in: ${firstCommand}. Returning true.`);
+      console.log(
+        `[requiresShell] Matched Windows built-in: ${firstCommand}. Returning true.`,
+      );
       return true;
     }
   }
@@ -59,15 +146,19 @@ export function requiresShell(cmd: Array<string>): boolean {
   if (cmd.length === 1 && cmd[0] !== undefined) {
     // 'parse' is imported from 'shell-quote'
     const tokens = parse(cmd[0]) as Array<ParseEntry>;
-    const needsShellForOperator = tokens.some((token) => typeof token === "object" && "op" in token);
-    console.log(`[requiresShell] Needs shell for operator: ${needsShellForOperator}`);
+    const needsShellForOperator = tokens.some(
+      (token) => typeof token === "object" && "op" in token,
+    );
+    console.log(
+      `[requiresShell] Needs shell for operator: ${needsShellForOperator}`,
+    );
     return needsShellForOperator;
   }
 
   // If the command is split into multiple arguments (and not a Windows built-in from above),
   // we don't need shell: true even if one of the arguments is a shell operator like '|'.
   // The individual program would handle its arguments.
-  console.log('[requiresShell] No shell needed by default. Returning false.');
+  console.log("[requiresShell] No shell needed by default. Returning false.");
   return false;
 }
 
@@ -95,14 +186,16 @@ export function exec(
     const cdArgs = cmd.slice(1).join(" ");
     const dirSuffix = process.platform === "win32" ? " && cd" : " && pwd";
     // Combine into a single command string for shell execution
-    commandToExecute = [`cd ${cdArgs}${dirSuffix}`]; 
+    commandToExecute = [`cd ${cdArgs}${dirSuffix}`];
   }
 
   const opts: SpawnOptions = {
     timeout: timeoutInMillis || DEFAULT_TIMEOUT_MS,
     // If it's a cd command modified for pwd/cd, it definitely needs a shell.
     // Otherwise, use requiresShell for the original command.
-    ...(isCdCommand || requiresShell(originalCommandForLogging) ? { shell: true } : {}),
+    ...(isCdCommand || requiresShell(originalCommandForLogging)
+      ? { shell: true }
+      : {}),
     ...(workdir ? { cwd: workdir } : {}),
   };
 
@@ -119,7 +212,13 @@ export function exec(
         os.tmpdir(),
         ...additionalWritableRoots,
       ];
-      executorPromise = execWithSeatbelt(commandToExecute, opts, writableRoots, config, abortSignal);
+      executorPromise = execWithSeatbelt(
+        commandToExecute,
+        opts,
+        writableRoots,
+        config,
+        abortSignal,
+      );
       break;
     }
     case SandboxType.LINUX_LANDLOCK: {
@@ -140,7 +239,7 @@ export function exec(
       });
   }
 
-  return executorPromise.then(result => {
+  return executorPromise.then((result) => {
     if (isCdCommand && result.exitCode === 0 && result.stdout) {
       const lines = result.stdout.trim().split(/\r?\n/);
       const newPath = lines.pop()?.trim(); // Get the last non-empty line

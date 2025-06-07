@@ -47,7 +47,9 @@ const TerminalMessageHistory: React.FC<TerminalMessageHistoryProps> = ({
       <Static items={["header", ...messages]}>
         {(item, index) => {
           if (item === "header") {
-            return <TerminalHeader key="header" {...headerProps} workdir={workdir} />;
+            return (
+              <TerminalHeader key="header" {...headerProps} workdir={workdir} />
+            );
           }
 
           // After the guard above, item is a ResponseItem

@@ -1,5 +1,9 @@
 import type { CommandConfirmation } from "./agent-loop.js";
-import type { ApplyPatchCommand, ApprovalPolicy, SafetyAssessment } from "../../approvals.js";
+import type {
+  ApplyPatchCommand,
+  ApprovalPolicy,
+  SafetyAssessment,
+} from "../../approvals.js";
 import type { ExecInput } from "./sandbox/interface.js";
 import type { ResponseInputItem } from "openai/resources/responses/responses.mjs";
 
@@ -113,7 +117,9 @@ export async function handleExecCommand(
   // This is a bit redundant if assessment.applyPatch is populated, but good for clarity
   const applyPatchCommandDetails =
     assessment.applyPatch ??
-    (command[0] === "apply_patch" && command.length === 2 && typeof command[1] === "string"
+    (command[0] === "apply_patch" &&
+    command.length === 2 &&
+    typeof command[1] === "string"
       ? { patch: command[1] }
       : undefined);
 
@@ -138,11 +144,17 @@ export async function handleExecCommand(
         {
           type: "message",
           role: "user", // Or system, depending on how you want it to appear
-          content: [{ type: "input_text", text: `Command rejected: ${assessment.reason}` }],
+          content: [
+            {
+              type: "input_text",
+              text: `Command rejected: ${assessment.reason}`,
+            },
+          ],
         },
       ],
     };
-  } else { // assessment.type === "ask-user"
+  } else {
+    // assessment.type === "ask-user"
     // If canAutoApprove says to ask the user, then proceed to ask.
     const userPermissionResult = await askUserPermission(
       args,
@@ -151,7 +163,8 @@ export async function handleExecCommand(
       getCommandConfirmation,
     );
 
-    if (userPermissionResult) { // User denied or wants to stop
+    if (userPermissionResult) {
+      // User denied or wants to stop
       return userPermissionResult;
     }
 
@@ -159,12 +172,12 @@ export async function handleExecCommand(
     // Determine sandboxing for user-approved commands after an "ask-user" assessment.
     let runInSandboxAfterUserApproval = false;
     if (policy === "full-auto") {
-        // If the policy is full-auto and canAutoApprove still decided to ask the user,
-        // it implies the command wasn't simple enough for the direct auto-approve paths
-        // (which would have set runInSandbox: false if they were hit).
-        // In this case, if the user approves, we should still honor the 'full-auto'
-        // intent of running in a sandbox as a default precaution for this policy.
-        runInSandboxAfterUserApproval = true;
+      // If the policy is full-auto and canAutoApprove still decided to ask the user,
+      // it implies the command wasn't simple enough for the direct auto-approve paths
+      // (which would have set runInSandbox: false if they were hit).
+      // In this case, if the user approves, we should still honor the 'full-auto'
+      // intent of running in a sandbox as a default precaution for this policy.
+      runInSandboxAfterUserApproval = true;
     }
     // For 'suggest', 'auto-edit', or 'none' (though 'none' shouldn't reach 'ask-user'),
     // if the user explicitly approves after being asked, run without a sandbox.
@@ -184,22 +197,27 @@ function convertSummaryToResult(
   summary: ExecCommandSummary,
 ): HandleExecCommandResult {
   const { stdout, stderr, exitCode, durationMs, newWorkdir } = summary;
-  const rawOutput = stdout || stderr || `(code: ${exitCode}, duration: ${Math.round(durationMs / 1000)}s)`;
-  
+  const rawOutput =
+    stdout ||
+    stderr ||
+    `(code: ${exitCode}, duration: ${Math.round(durationMs / 1000)}s)`;
+
   // IMPORTANT: OpenAI tool output seems to expect plain text for shell outputs
   // So we're returning the raw command output directly instead of JSON
   // This is the most compatible format based on the error messages
   const outputText = rawOutput;
 
   // Log the output format for debugging
-  console.log(`[convertSummaryToResult] Formatting command output as plain text: ${outputText.substring(0, 100)}${outputText.length > 100 ? '...' : ''}`);
+  console.log(
+    `[convertSummaryToResult] Formatting command output as plain text: ${outputText.substring(0, 100)}${outputText.length > 100 ? "..." : ""}`,
+  );
 
   return {
-    outputText, 
+    outputText,
     metadata: {
       exitCode,
       durationMs,
-      raw_stdout: stdout, 
+      raw_stdout: stdout,
       raw_stderr: stderr,
     },
     ...(newWorkdir && { newWorkdir }),

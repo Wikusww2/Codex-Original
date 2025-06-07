@@ -40,7 +40,10 @@ class AsyncLogger implements Logger {
     try {
       await fs.appendFile(this.filePath, messages);
     } catch (error) {
-      console.error("[AsyncLogger.maybeWrite] Error writing to log file:", error);
+      console.error(
+        "[AsyncLogger.maybeWrite] Error writing to log file:",
+        error,
+      );
     } finally {
       this.isWriting = false;
     }
@@ -83,7 +86,10 @@ export function initLogger(debugMode?: boolean): Logger {
   // Suppressing all console logs during initialization
   if (logger) {
     return logger;
-  } else if (debugMode === false || (debugMode === undefined && !process.env["DEBUG"])) {
+  } else if (
+    debugMode === false ||
+    (debugMode === undefined && !process.env["DEBUG"])
+  ) {
     logger = new EmptyLogger();
     return logger;
   }

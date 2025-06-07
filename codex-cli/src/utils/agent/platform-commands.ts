@@ -55,10 +55,14 @@ export function adaptCommandForPlatform(command: Array<string>): Array<string> {
   const cmd = command[0];
 
   // Special handling for PowerShell commands - never modify them
-  if (!cmd || cmd.toLowerCase() === 'powershell' || cmd.toLowerCase() === 'pwsh') {
+  if (
+    !cmd ||
+    cmd.toLowerCase() === "powershell" ||
+    cmd.toLowerCase() === "pwsh"
+  ) {
     return command;
   }
-  
+
   // If the command doesn't need adaptation, return it as is
   if (!COMMAND_MAP[cmd]) {
     return command;

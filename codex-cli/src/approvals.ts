@@ -91,7 +91,10 @@ export function canAutoApprove(
   // Handle "none" and "full-auto" policies upfront
   if (isFullAutoOrNone(policy)) {
     // Still reject malformed apply_patch commands even in "none" or "full-auto" mode
-    if (command[0] === "apply_patch" && (command.length !== 2 || typeof command[1] !== "string")) {
+    if (
+      command[0] === "apply_patch" &&
+      (command.length !== 2 || typeof command[1] !== "string")
+    ) {
       return {
         type: "reject",
         reason: "Invalid apply_patch command",
@@ -104,7 +107,9 @@ export function canAutoApprove(
       runInSandbox: policy === "full-auto",
       reason: `Approval policy is '${policy}'`,
       group: command[0] === "apply_patch" ? "Editing" : "Running commands",
-      ...(command[0] === "apply_patch" && { applyPatch: { patch: command[1] as string } }),
+      ...(command[0] === "apply_patch" && {
+        applyPatch: { patch: command[1] as string },
+      }),
     };
   }
   if (command[0] === "apply_patch") {
@@ -387,9 +392,12 @@ export function isSafeCommand(
   if (command.length === 0) {
     return null;
   }
-  
+
   // Always approve PowerShell commands as safe
-  if (command[0]?.toLowerCase() === 'powershell' || command[0]?.toLowerCase() === 'pwsh') {
+  if (
+    command[0]?.toLowerCase() === "powershell" ||
+    command[0]?.toLowerCase() === "pwsh"
+  ) {
     return {
       reason: "PowerShell command",
       group: "PowerShell",
@@ -404,23 +412,33 @@ export function isSafeCommand(
   if (workingCmdArray.length === 1) {
     const singleCommandString = workingCmdArray[0];
     // Explicitly check if singleCommandString is a string before using string methods
-    if (typeof singleCommandString === 'string') {
+    if (typeof singleCommandString === "string") {
       if (
-        singleCommandString.startsWith("'dir > ") && 
+        singleCommandString.startsWith("'dir > ") &&
         singleCommandString.endsWith("'")
       ) {
         const innerCommand = singleCommandString.slice(1, -1); // Remove outer single quotes
-        const parts = innerCommand.split(' '); 
+        const parts = innerCommand.split(" ");
         // Ensure parts[0] is a string before calling toLowerCase()
         if (
           parts.length === 3 &&
-          typeof parts[0] === 'string' && parts[0].toLowerCase() === 'dir' &&
-          parts[1] === '>'
+          typeof parts[0] === "string" &&
+          parts[0].toLowerCase() === "dir" &&
+          parts[1] === ">"
         ) {
           const filename = parts[2]; // parts[2] is also a string due to split(' ')
           // Check if filename is a simple filename (not an option character and has some length)
-          if (filename && filename.length > 0 && !filename.startsWith('/') && !filename.startsWith('-')) {
-            return { reason: "List directory contents and redirect to file (auto-approved due to unwrapping agent's quotes)", group: "File system" };
+          if (
+            filename &&
+            filename.length > 0 &&
+            !filename.startsWith("/") &&
+            !filename.startsWith("-")
+          ) {
+            return {
+              reason:
+                "List directory contents and redirect to file (auto-approved due to unwrapping agent's quotes)",
+              group: "File system",
+            };
           }
         }
       }
@@ -428,7 +446,10 @@ export function isSafeCommand(
   }
 
   // Ensure workingCmdArray[0] is valid before toLowerCase()
-  const cmdName = (typeof workingCmdArray[0] === 'string') ? workingCmdArray[0].toLowerCase() : undefined;
+  const cmdName =
+    typeof workingCmdArray[0] === "string"
+      ? workingCmdArray[0].toLowerCase()
+      : undefined;
   if (!cmdName) {
     return null;
   }
@@ -442,16 +463,16 @@ export function isSafeCommand(
       group: "Navigating",
     }),
     ls: (cmdArray: ReadonlyArray<string>) => {
-      if (cmdArray.slice(1).some(arg => arg.includes("`") || arg.includes("$"))) return null;
+      if (
+        cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$"))
+      )
+        return null;
       return { reason: "List files/List directory", group: "Reading files" };
     },
     dir: (cmdArray: ReadonlyArray<string>) => {
       if (process.platform !== "win32") return null;
       // Allow 'dir'
-      if (
-        cmdArray.length === 1 &&
-        cmdArray[0]?.toLowerCase() === "dir"
-      ) {
+      if (cmdArray.length === 1 && cmdArray[0]?.toLowerCase() === "dir") {
         return { reason: "List directory contents", group: "File system" };
       }
       // Allow 'dir > filename' or 'dir >> filename'
@@ -460,9 +481,13 @@ export function isSafeCommand(
         cmdArray[0]?.toLowerCase() === "dir" &&
         (cmdArray[1] === ">" || cmdArray[1] === ">>") &&
         cmdArray[2] && // Ensure cmdArray[2] exists and is truthy
-        typeof cmdArray[2] === 'string' && !cmdArray[2].startsWith("-")
+        typeof cmdArray[2] === "string" &&
+        !cmdArray[2].startsWith("-")
       ) {
-        return { reason: "List directory contents and redirect to file", group: "File system" };
+        return {
+          reason: "List directory contents and redirect to file",
+          group: "File system",
+        };
       }
       // If no redirection, check other arguments
       // All arguments must not start with / or - unless they are known safe options
@@ -470,19 +495,30 @@ export function isSafeCommand(
         const arg = cmdArray[i];
         // Handle potential null/undefined from split if it occurs
         if (arg === null || arg === undefined) {
-           // Consider this malformed and unsafe
-           return null;
+          // Consider this malformed and unsafe
+          return null;
         }
         // If argument is an empty string, it's not an option, treat as safe and continue.
         if (arg === "") {
-            continue;
+          continue;
         }
 
-        if ((arg.startsWith("/") || arg.startsWith("-"))) {
-           const safeDirOptions = ["/ad", "/b", "/s", "/o", "/on", "/od", "/og", "/os", "/oe", "/a"]; // /a for attributes
-           if (!safeDirOptions.includes(arg.toLowerCase())) {
-              return null;
-           }
+        if (arg.startsWith("/") || arg.startsWith("-")) {
+          const safeDirOptions = [
+            "/ad",
+            "/b",
+            "/s",
+            "/o",
+            "/on",
+            "/od",
+            "/og",
+            "/os",
+            "/oe",
+            "/a",
+          ]; // /a for attributes
+          if (!safeDirOptions.includes(arg.toLowerCase())) {
+            return null;
+          }
         }
       }
       return { reason: "List directory contents", group: "File system" };
@@ -496,57 +532,88 @@ export function isSafeCommand(
       group: "Utility",
     }),
     false: (_cmdArray: ReadonlyArray<string>) => ({
-        reason: "No-op (false)",
-        group: "Utility",
+      reason: "No-op (false)",
+      group: "Utility",
     }),
-    echo: (_cmdArray: ReadonlyArray<string>) => ({ reason: "Echo string", group: "Printing" }),
+    echo: (_cmdArray: ReadonlyArray<string>) => ({
+      reason: "Echo string",
+      group: "Printing",
+    }),
     cat: (cmdArray: ReadonlyArray<string>) => {
-      if (cmdArray.slice(1).some(arg => arg.includes("`") || arg.includes("$"))) return null;
+      if (
+        cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$"))
+      )
+        return null;
       return { reason: "View file contents", group: "Reading files" };
     },
     nl: (_cmdArray: ReadonlyArray<string>) => ({
       reason: "View file with line numbers",
       group: "Reading files",
     }),
-    clear: (_cmdArray: ReadonlyArray<string>) => ({ reason: "Clear screen", group: "Utility" }),
+    clear: (_cmdArray: ReadonlyArray<string>) => ({
+      reason: "Clear screen",
+      group: "Utility",
+    }),
     grep: (cmdArray: ReadonlyArray<string>) => {
-      if (cmdArray.slice(1).some(arg => arg.includes("`") || arg.includes("$"))) return null;
+      if (
+        cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$"))
+      )
+        return null;
       return { reason: "Text search (grep)", group: "Searching" };
     },
-    head: (_cmdArray: ReadonlyArray<string>) => ({ reason: "Show file head", group: "Reading files" }),
-    tail: (_cmdArray: ReadonlyArray<string>) => ({ reason: "Show file tail", group: "Reading files" }),
-    which: (_cmdArray: ReadonlyArray<string>) => ({ reason: "Locate command", group: "Searching" }),
+    head: (_cmdArray: ReadonlyArray<string>) => ({
+      reason: "Show file head",
+      group: "Reading files",
+    }),
+    tail: (_cmdArray: ReadonlyArray<string>) => ({
+      reason: "Show file tail",
+      group: "Reading files",
+    }),
+    which: (_cmdArray: ReadonlyArray<string>) => ({
+      reason: "Locate command",
+      group: "Searching",
+    }),
     git: (cmdArray: ReadonlyArray<string>) => {
       const subCommand = cmdArray[1]?.toLowerCase();
       if (!subCommand) return null;
 
       const safeSubCommands: Record<string, string> = {
-        status: "View status",
-        diff: "View differences",
-        log: "View history",
-        show: "View specific commit/object",
-        branch: "List branches",
-        tag: "List tags",
+        "status": "View status",
+        "diff": "View differences",
+        "log": "View history",
+        "show": "View specific commit/object",
+        "branch": "List branches",
+        "tag": "List tags",
         "rev-parse": "Find commit IDs",
         "shortlog -s -n": "Summarize git log",
       };
 
       // Handle specific multi-word command "shortlog -s -n"
-      if (subCommand === "shortlog" && cmdArray.length >= 4 && cmdArray[2] === "-s" && cmdArray[3] === "-n") {
+      if (
+        subCommand === "shortlog" &&
+        cmdArray.length >= 4 &&
+        cmdArray[2] === "-s" &&
+        cmdArray[3] === "-n"
+      ) {
         const reasonText = safeSubCommands["shortlog -s -n"];
         // This key is literal, so reasonText should always be a string here.
         // Adding an explicit check for robustness or to satisfy the type checker if it's being overly cautious.
-        if (typeof reasonText === 'string') {
-            return { reason: reasonText, group: "Versioning" };
+        if (typeof reasonText === "string") {
+          return { reason: reasonText, group: "Versioning" };
         }
         return null; // Should not be reached if safeSubCommands is correctly defined
       }
 
       // Handle other general safe subcommands
       const reasonForSubCommand = safeSubCommands[subCommand];
-      if (typeof reasonForSubCommand === 'string') { // Explicitly check that a string was retrieved
-        if ((subCommand === "branch" || subCommand === "tag") && cmdArray.length > 2) {
-          if (cmdArray.slice(2).every(arg => !arg.startsWith("-"))) return null;
+      if (typeof reasonForSubCommand === "string") {
+        // Explicitly check that a string was retrieved
+        if (
+          (subCommand === "branch" || subCommand === "tag") &&
+          cmdArray.length > 2
+        ) {
+          if (cmdArray.slice(2).every((arg) => !arg.startsWith("-")))
+            return null;
         }
         return {
           reason: reasonForSubCommand, // Now reasonForSubCommand is confirmed to be a string
@@ -555,7 +622,11 @@ export function isSafeCommand(
       }
 
       // Handle 'git apply --stat --check'
-      if (subCommand === "apply" && cmdArray.includes("--check") && cmdArray.includes("--stat")) {
+      if (
+        subCommand === "apply" &&
+        cmdArray.includes("--check") &&
+        cmdArray.includes("--stat")
+      ) {
         return { reason: "Check patch applicability", group: "Source control" };
       }
       return null;
@@ -570,7 +641,8 @@ export function isSafeCommand(
       if (
         cmdArray[1]?.toLowerCase() === "-n" &&
         isValidSedNArg(cmdArray[2]) &&
-        (cmdArray.length === 3 || (typeof cmdArray[3] === "string" && cmdArray.length === 4))
+        (cmdArray.length === 3 ||
+          (typeof cmdArray[3] === "string" && cmdArray.length === 4))
       ) {
         return { reason: "Sed print subset", group: "Reading files" };
       }
@@ -583,8 +655,16 @@ export function isSafeCommand(
         // Case: start <file_path>
         // e.g., start dir_output.txt
         const filePath = cmdArray[1];
-        if (typeof filePath === 'string' && filePath.length > 0 && !filePath.startsWith('-') && !filePath.startsWith('/')) {
-          return { reason: "Open file/directory with default application", group: "File system" };
+        if (
+          typeof filePath === "string" &&
+          filePath.length > 0 &&
+          !filePath.startsWith("-") &&
+          !filePath.startsWith("/")
+        ) {
+          return {
+            reason: "Open file/directory with default application",
+            group: "File system",
+          };
         }
       } else if (cmdArray.length === 3) {
         // Case: start <program> <file_path_or_argument>
@@ -594,11 +674,15 @@ export function isSafeCommand(
         const argument = cmdArray[2]; // Can be a file path or other arguments like '.' for explorer
         const knownSafePrograms = ["notepad", "explorer"]; // Add more if needed (e.g., "code")
 
-        if (typeof program === 'string' && knownSafePrograms.includes(program) &&
-            typeof argument === 'string' && argument.length > 0 && 
-            // For explorer, '.' is a safe argument. For others, avoid options.
-            (program === 'explorer' || (!argument.startsWith('-') && !argument.startsWith('/')))
-            ) {
+        if (
+          typeof program === "string" &&
+          knownSafePrograms.includes(program) &&
+          typeof argument === "string" &&
+          argument.length > 0 &&
+          // For explorer, '.' is a safe argument. For others, avoid options.
+          (program === "explorer" ||
+            (!argument.startsWith("-") && !argument.startsWith("/")))
+        ) {
           return { reason: `Open with ${program}`, group: "File system" };
         }
       }
@@ -613,7 +697,10 @@ export function isSafeCommand(
         cmdArray[1]?.toLowerCase() === "/c" &&
         cmdArray[2]?.toLowerCase() === "dir"
       ) {
-        return { reason: "List directory contents via cmd", group: "File system" };
+        return {
+          reason: "List directory contents via cmd",
+          group: "File system",
+        };
       }
       // Allow 'cmd /c dir > filename' or 'cmd /c dir >> filename'
       if (
@@ -623,15 +710,21 @@ export function isSafeCommand(
         cmdArray[2]?.toLowerCase() === "dir" &&
         (cmdArray[3] === ">" || cmdArray[3] === ">>") &&
         cmdArray[4] && // Ensure cmdArray[4] exists and is truthy
-        typeof cmdArray[4] === 'string' && !cmdArray[4].startsWith("-")
+        typeof cmdArray[4] === "string" &&
+        !cmdArray[4].startsWith("-")
       ) {
-        return { reason: "List directory contents via cmd and redirect to file", group: "File system" };
+        return {
+          reason: "List directory contents via cmd and redirect to file",
+          group: "File system",
+        };
       }
       return null;
     },
     find: (cmdArray: ReadonlyArray<string>) => {
-      if (cmdArray.some((arg: string) => UNSAFE_OPTIONS_FOR_FIND_COMMAND.has(arg))) {
-        return null; 
+      if (
+        cmdArray.some((arg: string) => UNSAFE_OPTIONS_FOR_FIND_COMMAND.has(arg))
+      ) {
+        return null;
       }
       return {
         reason: "Find files or directories",
@@ -653,7 +746,9 @@ export function isSafeCommand(
         cmdArray.length === 2 &&
         cmdArray[0]?.toLowerCase() === "type" &&
         cmdArray[1] && // Ensure cmdArray[1] (the filename) exists
-        typeof cmdArray[1] === 'string' && !cmdArray[1].startsWith("/") && !cmdArray[1].startsWith("-")
+        typeof cmdArray[1] === "string" &&
+        !cmdArray[1].startsWith("/") &&
+        !cmdArray[1].startsWith("-")
       ) {
         return { reason: "Display file contents", group: "File system" };
       }

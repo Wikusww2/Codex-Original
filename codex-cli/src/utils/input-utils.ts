@@ -1,5 +1,5 @@
 import type { ResponseInputItem } from "openai/resources/responses/responses";
-export type { ResponseInputItem }; 
+export type { ResponseInputItem };
 
 import { fileTypeFromBuffer } from "file-type";
 import fs from "fs/promises";

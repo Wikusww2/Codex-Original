@@ -21,7 +21,12 @@ export function parseToolCallOutput(toolCallOutput: string): {
 
     // Check if the parsed object has the expected 'output' and 'metadata' fields
     // This handles cases where toolCallOutput might be a JSON string but not of the expected structure.
-    if (typeof parsed === 'object' && parsed !== null && 'output' in parsed && 'metadata' in parsed) {
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "output" in parsed &&
+      "metadata" in parsed
+    ) {
       return {
         output: parsed.output as string, // Assuming parsed.output is a string
         metadata: parsed.metadata as ExecOutputMetadata, // Assuming parsed.metadata conforms to ExecOutputMetadata
