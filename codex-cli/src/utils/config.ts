@@ -111,11 +111,24 @@ export function getBaseUrl(provider: string = "openai"): string | undefined {
 export function getApiKey(provider: string = "openai"): string | undefined {
   const config = loadConfig();
   const providersConfig = config.providers ?? providers;
-  const providerInfo = providersConfig[provider.toLowerCase()];
+  const lowerProvider = provider.toLowerCase();
+  const providerInfo = providersConfig[lowerProvider];
+
+  if (lowerProvider === "gemini") {
+    const geminiApiKey = process.env["GEMINI_API_KEY"];
+    if (geminiApiKey) {
+      log("[Config] GEMINI_API_KEY found in environment variables.");
+    } else {
+      log("[Config] GEMINI_API_KEY not found in environment variables.");
+    }
+    // Still proceed to return it via providerInfo logic or fallback
+  }
+
   if (providerInfo) {
     if (providerInfo.name === "Ollama") {
       return process.env[providerInfo.envKey] ?? "dummy";
     }
+    // For Gemini, this will re-evaluate process.env["GEMINI_API_KEY"] if GEMINI_API_KEY is the envKey
     return process.env[providerInfo.envKey];
   }
 

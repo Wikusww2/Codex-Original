@@ -320,13 +320,7 @@ export class AgentLoop {
     const apiKey = this.config.apiKey ?? process.env["OPENAI_API_KEY"] ?? "";
     const baseURL = getBaseUrl(this.provider);
 
-    this.oai = new OpenAI({
-      // The OpenAI JS SDK only requires `apiKey` when making requests against
-      // the official API.  When running unit‑tests we stub out all network
-      // calls so an undefined key is perfectly fine.  We therefore only set
-      // the property if we actually have a value to avoid triggering runtime
-      // errors inside the SDK (it validates that `apiKey` is a non‑empty
-      // string when the field is present).
+    const commonOptions = {
       ...(apiKey ? { apiKey } : {}),
       baseURL,
       defaultHeaders: {
@@ -340,11 +334,17 @@ export class AgentLoop {
       },
       httpAgent: PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : undefined,
       ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
-    });
+    };
 
-    if (this.provider.toLowerCase() === "azure") {
+    if (this.provider.toLowerCase() === "gemini") {
+      log("AgentLoop: Applying dangerouslyAllowBrowser: true for Gemini provider");
+      this.oai = new OpenAI({
+        ...commonOptions,
+        dangerouslyAllowBrowser: true,
+      });
+    } else if (this.provider.toLowerCase() === "azure") {
       this.oai = new AzureOpenAI({
-        apiKey,
+        ...commonOptions,
         baseURL,
         apiVersion: AZURE_OPENAI_API_VERSION,
         defaultHeaders: {
@@ -824,9 +824,19 @@ export class AgentLoop {
               `instructions (length ${mergedInstructions.length}): ${mergedInstructions}`,
             );
 
+            let modelForApi = this.model;
+            if (this.provider.toLowerCase() === "gemini") {
+              if (!modelForApi.startsWith("models/")) {
+                modelForApi = `models/${modelForApi}`;
+                log(`AgentLoop: Prepended "models/" to model name for Gemini. Original: "${this.model}", New: "${modelForApi}"`);
+              } else {
+                log(`AgentLoop: Model name "${modelForApi}" already prefixed for Gemini.`);
+              }
+            }
+
             // eslint-disable-next-line no-await-in-loop
             stream = await responseCall({
-              model: this.model,
+              model: modelForApi,
               instructions: mergedInstructions,
               input: turnInput,
               stream: true,
@@ -1215,7 +1225,7 @@ export class AgentLoop {
               );
               // eslint-disable-next-line no-await-in-loop
               stream = await responseCall({
-                model: this.model,
+                model: modelForApi,
                 instructions: mergedInstructions,
                 input: turnInput,
                 stream: true,
