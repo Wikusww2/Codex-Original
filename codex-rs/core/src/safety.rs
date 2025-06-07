@@ -38,7 +38,8 @@ pub fn assess_patch_safety(
         // we want to continue to the writable paths check before asking the user.
         AskForApproval::UnlessAllowListed => {
             return SafetyCheck::AskUser;
-        }
+        },
+        protocol::AskForApproval::BypassPolicyAndNeverAsk => todo!(),
     }
 
     if is_write_patch_constrained_to_writable_paths(action, writable_roots, cwd) {
