@@ -20,13 +20,13 @@ export function exec(
   config: AppConfig,
   abortSignal?: AbortSignal,
 ): Promise<ExecResult> {
-  console.log(
+  log(
     `[raw-exec] exec called with originalCmd: ${JSON.stringify(originalCmd)}, workdir: ${options.cwd}`,
-  ); // Updated log
+  );
 
   // Adapt command for the current platform (e.g., convert 'ls' to 'dir' on Windows)
   let adaptedCommand = adaptCommandForPlatform(originalCmd); // Updated - changed to let for mutability
-  console.log(`[raw-exec] adaptedCommand: ${JSON.stringify(adaptedCommand)}`);
+  log(`[raw-exec] adaptedCommand: ${JSON.stringify(adaptedCommand)}`);
 
   // Check if this is a PowerShell command
   const isPowerShellCommand =
@@ -172,13 +172,13 @@ export function exec(
       };
 
       // First try graceful termination.
-      console.log("Attempting to terminate child process with SIGTERM");
+      log("Attempting to terminate child process with SIGTERM");
       killTarget("SIGTERM");
 
       // Escalate to SIGKILL if the group refuses to die.
-      console.log("Waiting for 2 seconds before sending SIGKILL");
+      log("Waiting for 2 seconds before sending SIGKILL");
       setTimeout(() => {
-        console.log("Sending SIGKILL to child process");
+        log("Sending SIGKILL to child process");
         if (!child.killed) {
           killTarget("SIGKILL");
         }
