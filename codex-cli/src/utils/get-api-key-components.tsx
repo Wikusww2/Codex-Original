@@ -8,13 +8,18 @@ export type Choice = { type: "signin" } | { type: "apikey"; key: string };
 
 export function ApiKeyPrompt({
   onDone,
+  provider,
 }: {
   onDone: (choice: Choice) => void;
+  provider?: string;
 }): JSX.Element {
-  const [step, setStep] = useState<"select" | "paste">("select");
+  const isOpenAI = !provider || provider.toLowerCase() === "openai";
+  const [step, setStep] = useState<"select" | "paste">(
+    isOpenAI ? "select" : "paste",
+  );
   const [apiKey, setApiKey] = useState("");
 
-  if (step === "select") {
+  if (step === "select" && isOpenAI) {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="column">
@@ -44,9 +49,15 @@ export function ApiKeyPrompt({
     );
   }
 
+  const providerName = provider
+    ? provider.charAt(0).toUpperCase() + provider.slice(1)
+    : "OpenAI";
+
   return (
     <Box flexDirection="column">
-      <Text>Paste your OpenAI API key and press &lt;Enter&gt;:</Text>
+      <Text>
+        Paste your {providerName} API key and press &lt;Enter&gt;:
+      </Text>
       <TextInput
         value={apiKey}
         onChange={setApiKey}
@@ -55,7 +66,7 @@ export function ApiKeyPrompt({
             onDone({ type: "apikey", key: value.trim() });
           }
         }}
-        placeholder="sk-..."
+        placeholder={isOpenAI ? "sk-..." : "Enter your API key"}
         mask="*"
       />
     </Box>
