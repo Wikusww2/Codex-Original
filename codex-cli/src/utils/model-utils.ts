@@ -43,6 +43,10 @@ async function fetchModels(provider: string): Promise<Array<string>> {
 
     return models.sort();
   } catch (error) {
+    console.error(
+      `[Codex CLI] Error fetching models for provider '${provider}':`,
+      error,
+    );
     return [];
   }
 }
