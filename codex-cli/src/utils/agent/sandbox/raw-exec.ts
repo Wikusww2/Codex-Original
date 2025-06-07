@@ -179,23 +179,17 @@ export function exec(
       };
 
       // First try graceful termination.
-      console.log("Attempting to terminate child process group with SIGTERM");
+      console.log("Attempting to terminate child process with SIGTERM");
       killTarget("SIGTERM");
-      try {
-        child.kill("SIGTERM");
-      } catch {}
 
-      // Immediately send SIGKILL to ensure termination.
-      console.log("Sending SIGKILL to child process group");
-      killTarget("SIGKILL");
-      try {
-        child.kill("SIGKILL");
-      } catch {}
-      if (childSpawnedPid) {
-        try {
-          process.kill(childSpawnedPid, "SIGKILL");
-        } catch {}
-      }
+      // Escalate to SIGKILL if the group refuses to die.
+      console.log("Waiting for 2 seconds before sending SIGKILL");
+      setTimeout(() => {
+        console.log("Sending SIGKILL to child process");
+        if (!child.killed) {
+          killTarget("SIGKILL");
+        }
+      }, 2000).unref();
     };
     if (abortSignal.aborted) {
       abortHandler();
