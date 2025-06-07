@@ -13,6 +13,7 @@ import type {
   ApplyPatchCommand,
   SafetyAssessment,
 } from "../../approvals.js";
+import { AutoApprovalMode } from "../../utils/auto-approval-mode.js";
 import type { AppConfig } from "../../utils/config.js";
 import type {
   ResponseItem,
@@ -153,7 +154,6 @@ export const TerminalChat: React.FC<Props> = ({
   fullStdout,
 }: Props): React.ReactElement => {
   useEffect(() => {
-    // Debug logging disabled
   }, [approvalPolicy]);
 
   const notify = Boolean(config.notify);
@@ -171,8 +171,9 @@ export const TerminalChat: React.FC<Props> = ({
 
   const colorsByPolicy: Record<string, string | undefined> = {
     "full-auto": "green",
+    [AutoApprovalMode.FULL_AUTO]: "green",
+    [AutoApprovalMode.NONE]: "red",
     "needs-confirmation": "yellow",
-    "none": "red",
     "manual": "cyan",
   };
 
@@ -226,13 +227,12 @@ export const TerminalChat: React.FC<Props> = ({
     _initialPromptFromProps,
   );
   const [currentImagePaths, setCurrentImagePaths] = useState(
-    // Renamed state variable
     _initialImagePathsFromProps, // Initialized with the prop value
   );
 
   const agentRef = useRef<AgentLoop | null>(null);
   const initialPromptProcessed = useRef(false);
-  const prevLoadingRef = useRef<boolean>(loading); // Redeclared prevLoadingRef
+  const prevLoadingRef = useRef<boolean>(loading);
 
   const [workdir, setWorkdir] = useState<string>(process.cwd());
 
@@ -276,16 +276,11 @@ export const TerminalChat: React.FC<Props> = ({
         commandForConfirmation: Array<string>,
         applyPatch: ApplyPatchCommand | undefined,
       ): Promise<CommandConfirmation> => {
-        console.log(
-          `[Codex Debug] TerminalChat.getCommandConfirmation: approvalPolicy state is '${approvalPolicy}'`,
-        );
-
         // Always auto-approve commands in full-auto or none modes
-        // Handle both "full-auto" (code) and "full_auto" (UI) formats
         if (
           approvalPolicy === "full-auto" ||
-          approvalPolicy === "full_auto" ||
-          approvalPolicy === "none"
+          approvalPolicy === AutoApprovalMode.FULL_AUTO ||
+          approvalPolicy === AutoApprovalMode.NONE
         ) {
           // Only reject commands that have been explicitly marked as reject
           if (safetyAssessment.type === "reject") {
