@@ -61,14 +61,7 @@ export type ApprovalPolicy =
    * where network access is disabled and writes are limited to a specific set
    * of paths.
    */
-  | "full-auto"
-  | "full_auto" // UI format with underscore
-
-  /**
-   * No approval is ever asked. Commands are run directly, bypassing sandbox
-   * policy checks. USE WITH EXTREME CAUTION.
-   */
-  | "none";
+  | "full-auto";
 
 /**
  * Tries to assess whether a command is safe to run, though may defer to the
@@ -76,11 +69,6 @@ export type ApprovalPolicy =
  *
  * Note `env` must be the same `env` that will be used to spawn the process.
  */
-// Helper function to check policy values for TypeScript narrowing
-function isFullAutoOrNone(policy: ApprovalPolicy): boolean {
-  return policy === "full-auto" || policy === "full_auto" || policy === "none";
-}
-
 export function canAutoApprove(
   command: ReadonlyArray<string>,
   workdir: string | undefined,
@@ -88,30 +76,6 @@ export function canAutoApprove(
   writableRoots: ReadonlyArray<string>,
   env: NodeJS.ProcessEnv = process.env,
 ): SafetyAssessment {
-  // Handle "none" and "full-auto" policies upfront
-  if (isFullAutoOrNone(policy)) {
-    // Still reject malformed apply_patch commands even in "none" or "full-auto" mode
-    if (
-      command[0] === "apply_patch" &&
-      (command.length !== 2 || typeof command[1] !== "string")
-    ) {
-      return {
-        type: "reject",
-        reason: "Invalid apply_patch command",
-      };
-    }
-    // For all other commands, auto-approve
-    return {
-      type: "auto-approve",
-      // Run in sandbox if in full-auto mode, but not in none mode
-      runInSandbox: policy === "full-auto",
-      reason: `Approval policy is '${policy}'`,
-      group: command[0] === "apply_patch" ? "Editing" : "Running commands",
-      ...(command[0] === "apply_patch" && {
-        applyPatch: { patch: command[1] as string },
-      }),
-    };
-  }
   if (command[0] === "apply_patch") {
     return command.length === 2 && typeof command[1] === "string"
       ? canAutoApproveApplyPatch(command[1], workdir, writableRoots, policy)
@@ -154,19 +118,23 @@ export function canAutoApprove(
     } catch (e) {
       // In practice, there seem to be syntactically valid shell commands that
       // shell-quote cannot parse, so we should not reject, but ask the user.
-      // UNLESS we are in full-auto or none, in which case we run it
-      if (isFullAutoOrNone(policy)) {
-        return {
-          type: "auto-approve",
-          reason: `${policy === "full-auto" ? "Full auto" : "None"} mode (unparsable bash command)`,
-          group: "Running commands",
-          runInSandbox: policy === "full-auto", // Keep sandbox for unparsable bash in full-auto, but not in none
-        };
-      } else {
-        // For suggest and auto-edit policies
-        return {
-          type: "ask-user",
-        };
+      switch (policy) {
+        case "full-auto":
+          // In full-auto, we still run the command automatically, but must
+          // restrict it to the sandbox.
+          return {
+            type: "auto-approve",
+            reason: "Full auto mode",
+            group: "Running commands",
+            runInSandbox: true,
+          };
+        case "suggest":
+        case "auto-edit":
+          // In all other modes, since we cannot reason about the command, we
+          // should ask the user.
+          return {
+            type: "ask-user",
+          };
       }
     }
 
@@ -176,7 +144,7 @@ export function canAutoApprove(
     // all operators belong to an allow-list. If so, the entire expression is
     // considered auto-approvable.
 
-    const shellSafe = isEntireShellExpressionSafe(bashCmd || []);
+    const shellSafe = isEntireShellExpressionSafe(bashCmd);
     if (shellSafe != null) {
       const { reason, group } = shellSafe;
       return {
@@ -188,17 +156,14 @@ export function canAutoApprove(
     }
   }
 
-  // Fallback for other commands not explicitly handled by isSafeCommand or bash parsing
-  if (isFullAutoOrNone(policy)) {
-    return {
-      type: "auto-approve",
-      reason: `${policy === "full-auto" ? "Full auto" : "None"} mode (command not on explicit safe list)`,
-      group: "Running commands",
-      runInSandbox: policy === "full-auto", // Use sandbox in full-auto mode only
-    };
-  }
-
-  return { type: "ask-user" };
+  return policy === "full-auto"
+    ? {
+        type: "auto-approve",
+        reason: "Full auto mode",
+        group: "Running commands",
+        runInSandbox: true,
+      }
+    : { type: "ask-user" };
 }
 
 function canAutoApproveApplyPatch(
@@ -207,17 +172,6 @@ function canAutoApproveApplyPatch(
   writableRoots: ReadonlyArray<string>,
   policy: ApprovalPolicy,
 ): SafetyAssessment {
-  // START ADDITION: Handle "none" policy upfront for apply_patch
-  if (policy === "none") {
-    return {
-      type: "auto-approve",
-      runInSandbox: false,
-      reason: "Approval policy is 'none' for apply_patch",
-      group: "Editing",
-      applyPatch: { patch: applyPatchArg },
-    };
-  }
-  // END ADDITION
   switch (policy) {
     case "full-auto":
       // Continue to see if this can be auto-approved.
@@ -369,14 +323,6 @@ function tryParseApplyPatch(bashArg: string): string | null {
   }
 }
 
-const VALID_SED_N_ARG = /^[0-9]+(,[0-9]+)?[p]$/;
-function isValidSedNArg(arg: string | undefined): boolean {
-  if (arg === undefined) {
-    return false;
-  }
-  return VALID_SED_N_ARG.test(arg);
-}
-
 export type SafeCommandReason = {
   reason: string;
   group: string;
@@ -389,380 +335,149 @@ export type SafeCommandReason = {
 export function isSafeCommand(
   command: ReadonlyArray<string>,
 ): SafeCommandReason | null {
-  if (command.length === 0) {
-    return null;
-  }
+  const [cmd0, cmd1, cmd2, cmd3] = command;
 
-  // Always approve PowerShell commands as safe
-  if (
-    command[0]?.toLowerCase() === "powershell" ||
-    command[0]?.toLowerCase() === "pwsh"
-  ) {
-    return {
-      reason: "PowerShell command",
-      group: "PowerShell",
-    };
-  }
-
-  let workingCmdArray = [...command]; // Use a mutable copy
-
-  // Handle agent wrapping 'dir > file.txt' in single quotes,
-  // resulting in cmdArray being ["'dir > file.txt'"].
-  // This is a workaround for a specific agent misbehavior.
-  if (workingCmdArray.length === 1) {
-    const singleCommandString = workingCmdArray[0];
-    // Explicitly check if singleCommandString is a string before using string methods
-    if (typeof singleCommandString === "string") {
-      if (
-        singleCommandString.startsWith("'dir > ") &&
-        singleCommandString.endsWith("'")
-      ) {
-        const innerCommand = singleCommandString.slice(1, -1); // Remove outer single quotes
-        const parts = innerCommand.split(" ");
-        // Ensure parts[0] is a string before calling toLowerCase()
-        if (
-          parts.length === 3 &&
-          typeof parts[0] === "string" &&
-          parts[0].toLowerCase() === "dir" &&
-          parts[1] === ">"
-        ) {
-          const filename = parts[2]; // parts[2] is also a string due to split(' ')
-          // Check if filename is a simple filename (not an option character and has some length)
-          if (
-            filename &&
-            filename.length > 0 &&
-            !filename.startsWith("/") &&
-            !filename.startsWith("-")
-          ) {
-            return {
-              reason:
-                "List directory contents and redirect to file (auto-approved due to unwrapping agent's quotes)",
-              group: "File system",
-            };
-          }
-        }
-      }
-    }
-  }
-
-  // Ensure workingCmdArray[0] is valid before toLowerCase()
-  const cmdName =
-    typeof workingCmdArray[0] === "string"
-      ? workingCmdArray[0].toLowerCase()
-      : undefined;
-  if (!cmdName) {
-    return null;
-  }
-
-  const commandHandlers: Record<
-    string,
-    (cmdArray: ReadonlyArray<string>) => SafeCommandReason | null
-  > = {
-    cd: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "Change directory",
-      group: "Navigating",
-    }),
-    ls: (cmdArray: ReadonlyArray<string>) => {
-      if (cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$")))
-        return null;
-      return { reason: "List directory", group: "Searching" };
-    },
-    dir: (cmdArray: ReadonlyArray<string>) => {
-      if (process.platform !== "win32") return null;
-      // Allow 'dir'
-      if (cmdArray.length === 1 && cmdArray[0]?.toLowerCase() === "dir") {
-        return { reason: "List directory contents", group: "File system" };
-      }
-      // Allow 'dir > filename' or 'dir >> filename'
-      if (
-        cmdArray.length === 3 &&
-        cmdArray[0]?.toLowerCase() === "dir" &&
-        (cmdArray[1] === ">" || cmdArray[1] === ">>") &&
-        cmdArray[2] && // Ensure cmdArray[2] exists and is truthy
-        typeof cmdArray[2] === "string" &&
-        !cmdArray[2].startsWith("-")
-      ) {
-        return {
-          reason: "List directory contents and redirect to file",
-          group: "File system",
-        };
-      }
-      // If no redirection, check other arguments
-      // All arguments must not start with / or - unless they are known safe options
-      for (let i = 1; i < cmdArray.length; i++) {
-        const arg = cmdArray[i];
-        // Handle potential null/undefined from split if it occurs
-        if (arg === null || arg === undefined) {
-          // Consider this malformed and unsafe
-          return null;
-        }
-        // If argument is an empty string, it's not an option, treat as safe and continue.
-        if (arg === "") {
-          continue;
-        }
-
-        if (arg.startsWith("/") || arg.startsWith("-")) {
-          const safeDirOptions = [
-            "/ad",
-            "/b",
-            "/s",
-            "/o",
-            "/on",
-            "/od",
-            "/og",
-            "/os",
-            "/oe",
-            "/a",
-          ]; // /a for attributes
-          if (!safeDirOptions.includes(arg.toLowerCase())) {
-            return null;
-          }
-        }
-      }
-      return { reason: "List directory contents", group: "File system" };
-    },
-    pwd: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "Print working directory",
-      group: "Navigating",
-    }),
-    true: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "No-op (true)",
-      group: "Utility",
-    }),
-    false: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "No-op (false)",
-      group: "Utility",
-    }),
-    echo: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "Echo string",
-      group: "Printing",
-    }),
-    cat: (cmdArray: ReadonlyArray<string>) => {
-      if (
-        cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$"))
-      )
-        return null;
-      return { reason: "View file contents", group: "Reading files" };
-    },
-    nl: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "View file with line numbers",
-      group: "Reading files",
-    }),
-    clear: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "Clear screen",
-      group: "Utility",
-    }),
-    grep: (cmdArray: ReadonlyArray<string>) => {
-      if (
-        cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$"))
-      )
-        return null;
-      return { reason: "Text search (grep)", group: "Searching" };
-    },
-    head: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "Show file head",
-      group: "Reading files",
-    }),
-    tail: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "Show file tail",
-      group: "Reading files",
-    }),
-    which: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "Locate command",
-      group: "Searching",
-    }),
-    git: (cmdArray: ReadonlyArray<string>) => {
-      const subCommand = cmdArray[1]?.toLowerCase();
-      if (!subCommand) return null;
-
-      const safeSubCommands: Record<string, string> = {
-        "status": "View status",
-        "diff": "View differences",
-        "log": "View history",
-        "show": "View specific commit/object",
-        "branch": "List branches",
-        "tag": "List tags",
-        "rev-parse": "Find commit IDs",
-        "shortlog -s -n": "Summarize git log",
-      };
-
-      // Handle specific multi-word command "shortlog -s -n"
-      if (
-        subCommand === "shortlog" &&
-        cmdArray.length >= 4 &&
-        cmdArray[2] === "-s" &&
-        cmdArray[3] === "-n"
-      ) {
-        const reasonText = safeSubCommands["shortlog -s -n"];
-        // This key is literal, so reasonText should always be a string here.
-        // Adding an explicit check for robustness or to satisfy the type checker if it's being overly cautious.
-        if (typeof reasonText === "string") {
-          return { reason: reasonText, group: "Versioning" };
-        }
-        return null; // Should not be reached if safeSubCommands is correctly defined
-      }
-
-      // Handle other general safe subcommands
-      const reasonForSubCommand = safeSubCommands[subCommand];
-      if (typeof reasonForSubCommand === "string") {
-        // Explicitly check that a string was retrieved
-        if (
-          (subCommand === "branch" || subCommand === "tag") &&
-          cmdArray.length > 2
-        ) {
-          if (cmdArray.slice(2).every((arg) => !arg.startsWith("-")))
-            return null;
-        }
-        const gitGroup = ["diff", "log", "show"].includes(subCommand)
-          ? "Using git"
-          : "Versioning";
-        return {
-          reason: reasonForSubCommand, // Now reasonForSubCommand is confirmed to be a string
-          group: gitGroup,
-        };
-      }
-
-      // Handle 'git apply --stat --check'
-      if (
-        subCommand === "apply" &&
-        cmdArray.includes("--check") &&
-        cmdArray.includes("--stat")
-      ) {
-        return { reason: "Check patch applicability", group: "Source control" };
-      }
-      return null;
-    },
-    cargo: (cmdArray: ReadonlyArray<string>) => {
-      if (cmdArray[1]?.toLowerCase() === "check") {
-        return { reason: "Cargo check", group: "Building" };
-      }
-      return null;
-    },
-    sed: (cmdArray: ReadonlyArray<string>) => {
-      if (
-        cmdArray[1]?.toLowerCase() === "-n" &&
-        isValidSedNArg(cmdArray[2]) &&
-        (cmdArray.length === 3 ||
-          (typeof cmdArray[3] === "string" && cmdArray.length === 4))
-      ) {
-        return { reason: "Sed print subset", group: "Reading files" };
-      }
-      return null;
-    },
-    start: (cmdArray: ReadonlyArray<string>) => {
-      if (process.platform !== "win32") return null; // 'start' is Windows-specific
-
-      if (cmdArray.length === 2) {
-        // Case: start <file_path>
-        // e.g., start dir_output.txt
-        const filePath = cmdArray[1];
-        if (
-          typeof filePath === "string" &&
-          filePath.length > 0 &&
-          !filePath.startsWith("-") &&
-          !filePath.startsWith("/")
-        ) {
-          return {
-            reason: "Open file/directory with default application",
-            group: "File system",
-          };
-        }
-      } else if (cmdArray.length === 3) {
-        // Case: start <program> <file_path_or_argument>
-        // e.g., start notepad dir_output.txt
-        // e.g., start explorer .
-        const program = cmdArray[1]?.toLowerCase();
-        const argument = cmdArray[2]; // Can be a file path or other arguments like '.' for explorer
-        const knownSafePrograms = ["notepad", "explorer"]; // Add more if needed (e.g., "code")
-
-        if (
-          typeof program === "string" &&
-          knownSafePrograms.includes(program) &&
-          typeof argument === "string" &&
-          argument.length > 0 &&
-          // For explorer, '.' is a safe argument. For others, avoid options.
-          (program === "explorer" ||
-            (!argument.startsWith("-") && !argument.startsWith("/")))
-        ) {
-          return { reason: `Open with ${program}`, group: "File system" };
-        }
-      }
-      return null; // Unhandled 'start' command pattern or unsafe arguments
-    },
-    cmd: (cmdArray: ReadonlyArray<string>) => {
-      if (process.platform !== "win32") return null;
-      // Allow 'cmd /c dir'
-      if (
-        cmdArray.length === 3 &&
-        cmdArray[0]?.toLowerCase() === "cmd" &&
-        cmdArray[1]?.toLowerCase() === "/c" &&
-        cmdArray[2]?.toLowerCase() === "dir"
-      ) {
-        return {
-          reason: "List directory contents via cmd",
-          group: "File system",
-        };
-      }
-      // Allow 'cmd /c dir > filename' or 'cmd /c dir >> filename'
-      if (
-        cmdArray.length === 5 &&
-        cmdArray[0]?.toLowerCase() === "cmd" &&
-        cmdArray[1]?.toLowerCase() === "/c" &&
-        cmdArray[2]?.toLowerCase() === "dir" &&
-        (cmdArray[3] === ">" || cmdArray[3] === ">>") &&
-        cmdArray[4] && // Ensure cmdArray[4] exists and is truthy
-        typeof cmdArray[4] === "string" &&
-        !cmdArray[4].startsWith("-")
-      ) {
-        return {
-          reason: "List directory contents via cmd and redirect to file",
-          group: "File system",
-        };
-      }
-      return null;
-    },
-    find: (cmdArray: ReadonlyArray<string>) => {
-      if (
-        cmdArray.some((arg: string) => UNSAFE_OPTIONS_FOR_FIND_COMMAND.has(arg))
-      ) {
-        return null;
-      }
+  switch (cmd0) {
+    case "cd":
       return {
-        reason: "Find files or directories",
+        reason: "Change directory",
+        group: "Navigating",
+      };
+    case "ls":
+      return {
+        reason: "List directory",
         group: "Searching",
       };
-    },
-    rg: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "Ripgrep search",
-      group: "Searching",
-    }),
-    wc: (_cmdArray: ReadonlyArray<string>) => ({
-      reason: "Word count",
-      group: "Reading files",
-    }),
-    type: (cmdArray: ReadonlyArray<string>) => {
-      if (process.platform !== "win32") return null;
-      // Allow 'type filename.ext'
+    case "pwd":
+      return {
+        reason: "Print working directory",
+        group: "Navigating",
+      };
+    case "true":
+      return {
+        reason: "No-op (true)",
+        group: "Utility",
+      };
+    case "echo":
+      return { reason: "Echo string", group: "Printing" };
+    case "cat":
+      return {
+        reason: "View file contents",
+        group: "Reading files",
+      };
+    case "nl":
+      return {
+        reason: "View file with line numbers",
+        group: "Reading files",
+      };
+    case "rg":
+      return {
+        reason: "Ripgrep search",
+        group: "Searching",
+      };
+    case "find": {
+      // Certain options to `find` allow executing arbitrary processes, so we
+      // cannot auto-approve them.
       if (
-        cmdArray.length === 2 &&
-        cmdArray[0]?.toLowerCase() === "type" &&
-        cmdArray[1] && // Ensure cmdArray[1] (the filename) exists
-        typeof cmdArray[1] === "string" &&
-        !cmdArray[1].startsWith("/") &&
-        !cmdArray[1].startsWith("-")
+        command.some((arg: string) => UNSAFE_OPTIONS_FOR_FIND_COMMAND.has(arg))
       ) {
-        return { reason: "Display file contents", group: "File system" };
+        break;
+      } else {
+        return {
+          reason: "Find files or directories",
+          group: "Searching",
+        };
       }
+    }
+    case "grep":
+      return {
+        reason: "Text search (grep)",
+        group: "Searching",
+      };
+    case "head":
+      return {
+        reason: "Show file head",
+        group: "Reading files",
+      };
+    case "tail":
+      return {
+        reason: "Show file tail",
+        group: "Reading files",
+      };
+    case "wc":
+      return {
+        reason: "Word count",
+        group: "Reading files",
+      };
+    case "which":
+      return {
+        reason: "Locate command",
+        group: "Searching",
+      };
+    case "git":
+      switch (cmd1) {
+        case "status":
+          return {
+            reason: "Git status",
+            group: "Versioning",
+          };
+        case "branch":
+          return {
+            reason: "List Git branches",
+            group: "Versioning",
+          };
+        case "log":
+          return {
+            reason: "Git log",
+            group: "Using git",
+          };
+        case "diff":
+          return {
+            reason: "Git diff",
+            group: "Using git",
+          };
+        case "show":
+          return {
+            reason: "Git show",
+            group: "Using git",
+          };
+        default:
+          return null;
+      }
+    case "cargo":
+      if (cmd1 === "check") {
+        return {
+          reason: "Cargo check",
+          group: "Running command",
+        };
+      }
+      break;
+    case "sed":
+      // We allow two types of sed invocations:
+      // 1. `sed -n 1,200p FILE`
+      // 2. `sed -n 1,200p` because the file is passed via stdin, e.g.,
+      //    `nl -ba README.md | sed -n '1,200p'`
+      if (
+        cmd1 === "-n" &&
+        isValidSedNArg(cmd2) &&
+        (command.length === 3 ||
+          (typeof cmd3 === "string" && command.length === 4))
+      ) {
+        return {
+          reason: "Sed print subset",
+          group: "Reading files",
+        };
+      }
+      break;
+    default:
       return null;
-    },
-  };
-
-  const handler = commandHandlers[cmdName];
-  if (handler) {
-    return handler(command);
   }
 
-  return null; // Default for commands not explicitly handled
+  return null;
+}
+
+function isValidSedNArg(arg: string | undefined): boolean {
+  return arg != null && /^(\d+,)?\d+p$/.test(arg);
 }
 
 const UNSAFE_OPTIONS_FOR_FIND_COMMAND: ReadonlySet<string> = new Set([

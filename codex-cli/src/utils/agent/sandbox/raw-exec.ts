@@ -138,6 +138,13 @@ export function exec(
     adaptedCommand.slice(1),
     spawnOptionsForExec,
   );
+  let childSpawnedPid: number | null = null;
+  child.stdout?.once("data", (d: Buffer) => {
+    const m = d.toString().match(/^(\d+)/);
+    if (m) {
+      childSpawnedPid = Number(m[1]);
+    }
+  });
   // If an AbortSignal is provided, ensure the spawned process is terminated
   // when the signal is triggered so that cancellations propagate down to any
   // long‑running child processes. We default to SIGTERM to give the process a
@@ -172,17 +179,23 @@ export function exec(
       };
 
       // First try graceful termination.
-      console.log("Attempting to terminate child process with SIGTERM");
+      console.log("Attempting to terminate child process group with SIGTERM");
       killTarget("SIGTERM");
+      try {
+        child.kill("SIGTERM");
+      } catch {}
 
-      // Escalate to SIGKILL if the group refuses to die.
-      console.log("Waiting for 2 seconds before sending SIGKILL");
-      setTimeout(() => {
-        console.log("Sending SIGKILL to child process");
-        if (!child.killed) {
-          killTarget("SIGKILL");
-        }
-      }, 2000).unref();
+      // Immediately send SIGKILL to ensure termination.
+      console.log("Sending SIGKILL to child process group");
+      killTarget("SIGKILL");
+      try {
+        child.kill("SIGKILL");
+      } catch {}
+      if (childSpawnedPid) {
+        try {
+          process.kill(childSpawnedPid, "SIGKILL");
+        } catch {}
+      }
     };
     if (abortSignal.aborted) {
       abortHandler();
@@ -245,13 +258,15 @@ export function exec(
         stderr,
         exitCode,
       };
-      resolve(
-        addTruncationWarningsIfNecessary(
-          execResult,
-          stdoutCollector.hit,
-          stderrCollector.hit,
-        ),
-      );
+      setTimeout(() => {
+        resolve(
+          addTruncationWarningsIfNecessary(
+            execResult,
+            stdoutCollector.hit,
+            stderrCollector.hit,
+          ),
+        );
+      }, 100);
     });
 
     child.on("error", (err) => {
