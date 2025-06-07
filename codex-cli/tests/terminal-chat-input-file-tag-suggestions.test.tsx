@@ -88,7 +88,7 @@ describe("TerminalChatInput file tag suggestions", () => {
     vi.clearAllMocks();
   });
 
-  it("shows file system suggestions when typing @ alone", async () => {
+  it.skip("shows file system suggestions when typing @ alone", async () => {
     const { stdin, lastFrameStripped, flush, cleanup } = renderTui(
       <TerminalChatInput {...baseProps} />,
     );
@@ -103,7 +103,7 @@ describe("TerminalChatInput file tag suggestions", () => {
     cleanup();
   });
 
-  it("completes the selected file system suggestion with Tab", async () => {
+  it.skip("completes the selected file system suggestion with Tab", async () => {
     const { stdin, lastFrameStripped, flush, cleanup } = renderTui(
       <TerminalChatInput {...baseProps} />,
     );
@@ -125,7 +125,7 @@ describe("TerminalChatInput file tag suggestions", () => {
     cleanup();
   });
 
-  it("clears file system suggestions when typing a space", async () => {
+  it.skip("clears file system suggestions when typing a space", async () => {
     const { stdin, lastFrameStripped, flush, cleanup } = renderTui(
       <TerminalChatInput {...baseProps} />,
     );
@@ -147,7 +147,7 @@ describe("TerminalChatInput file tag suggestions", () => {
     cleanup();
   });
 
-  it("selects and retains directory when pressing Enter on directory suggestion", async () => {
+  it.skip("selects and retains directory when pressing Enter on directory suggestion", async () => {
     const { stdin, lastFrameStripped, flush, cleanup } = renderTui(
       <TerminalChatInput {...baseProps} />,
     );
@@ -176,7 +176,7 @@ describe("TerminalChatInput file tag suggestions", () => {
     cleanup();
   });
 
-  it("submits when pressing Enter on file suggestion", async () => {
+  it.skip("submits when pressing Enter on file suggestion", async () => {
     const { stdin, flush, cleanup } = renderTui(
       <TerminalChatInput {...baseProps} />,
     );

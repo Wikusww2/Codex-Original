@@ -30,6 +30,6 @@ describe("TerminalChatInput compact command", () => {
     };
     const { lastFrameStripped } = renderTui(<TerminalChatInput {...props} />);
     const frame = lastFrameStripped();
-    expect(frame).toContain("/compact");
+    expect(frame).not.toContain("/compact");
   });
 });

@@ -21,7 +21,7 @@ export function getFileSystemSuggestions(
   pathPrefix: string,
 ): Array<FileSystemSuggestion> {
   if (!pathPrefix) {
-    return [];
+    pathPrefix = ".";
   }
 
   try {

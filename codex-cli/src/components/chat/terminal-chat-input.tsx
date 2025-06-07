@@ -131,9 +131,15 @@ export default function TerminalChatInput({
 
   const updateFsSuggestions = useCallback(
     (txt: string, alwaysUpdateSelection: boolean = false) => {
-      const suggestions = getFileSystemSuggestions(txt);
+      const hasAtPrefix = txt.startsWith("@");
+      const query = hasAtPrefix ? txt.slice(1) : txt;
+      const suggestions = getFileSystemSuggestions(query);
       setFsSuggestions(suggestions);
-      if (alwaysUpdateSelection || selectedCompletion >= suggestions.length) {
+      if (
+        alwaysUpdateSelection ||
+        selectedCompletion < 0 ||
+        selectedCompletion >= suggestions.length
+      ) {
         setSelectedCompletion(suggestions.length > 0 ? 0 : -1);
       }
     },
@@ -189,7 +195,16 @@ export default function TerminalChatInput({
             process.exit(0);
           }
           if (command.command === "/clear") {
-            setItems([]);
+            clearTerminal();
+            setItems((prev: Array<any>) => [
+              ...prev,
+              {
+                id: `clear-${Date.now()}`,
+                type: "message",
+                role: "system",
+                content: [{ type: "input_text", text: "Terminal cleared" }],
+              },
+            ]);
             return;
           }
           if (command.command === "/compact") {
@@ -318,6 +333,9 @@ export default function TerminalChatInput({
         if (fsSuggestions.length > 0 && selectedCompletion > -1) {
           setSelectedCompletion((prev) => Math.max(0, prev - 1));
         } else if (history.length > 0) {
+          if (!editorRef.current?.isCursorAtFirstRow()) {
+            return;
+          }
           let newIndex;
           if (historyIndex === null) {
             setDraftInput(input);
@@ -341,35 +359,39 @@ export default function TerminalChatInput({
           setSelectedCompletion((prev) =>
             Math.min(fsSuggestions.length - 1, prev + 1),
           );
-        } else if (historyIndex !== null && historyIndex < history.length - 1) {
-          const newIndex = historyIndex + 1;
-          setHistoryIndex(newIndex);
-          const newCmd = history[newIndex]?.command || "";
-          setInput(newCmd);
-          setEditorState((prev) => ({
-            key: prev.key + 1,
-            initialCursorOffset: newCmd.length,
-          }));
-        } else if (
-          historyIndex !== null &&
-          historyIndex === history.length - 1
-        ) {
-          setHistoryIndex(null);
-          setInput(draftInput);
-          setEditorState((prev) => ({
-            key: prev.key + 1,
-            initialCursorOffset: draftInput.length,
-          }));
+        } else if (history.length > 0) {
+          if (!editorRef.current?.isCursorAtLastRow()) {
+            return;
+          }
+          if (historyIndex !== null && historyIndex < history.length - 1) {
+            const newIndex = historyIndex + 1;
+            setHistoryIndex(newIndex);
+            const newCmd = history[newIndex]?.command || "";
+            setInput(newCmd);
+            setEditorState((prev) => ({
+              key: prev.key + 1,
+              initialCursorOffset: newCmd.length,
+            }));
+          } else if (historyIndex !== null && historyIndex === history.length - 1) {
+            setHistoryIndex(null);
+            setInput(draftInput);
+            setEditorState((prev) => ({
+              key: prev.key + 1,
+              initialCursorOffset: draftInput.length,
+            }));
+          }
         }
         setSkipNextSubmit(true);
       } else if (key.tab) {
         if (fsSuggestions.length > 0 && selectedCompletion > -1) {
           const suggestion = fsSuggestions[selectedCompletion];
           if (suggestion) {
-            setInput(suggestion.path);
+            const prefix = input.startsWith("@") ? "@" : "";
+            const newText = `${prefix}${suggestion.path}`;
+            setInput(newText);
             setEditorState((prev) => ({
               key: prev.key + 1,
-              initialCursorOffset: suggestion.path.length,
+              initialCursorOffset: newText.length,
             }));
             setFsSuggestions([]);
             setSelectedCompletion(-1);

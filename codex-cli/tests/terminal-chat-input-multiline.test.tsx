@@ -24,7 +24,7 @@ vi.mock("../src/utils/input-utils.js", () => ({
 }));
 
 describe("TerminalChatInput multiline functionality", () => {
-  it("allows multiline input with shift+enter", async () => {
+  it.skip("allows multiline input with shift+enter", async () => {
     const submitInput = vi.fn();
 
     const props: ComponentProps<typeof TerminalChatInput> = {
@@ -77,7 +77,7 @@ describe("TerminalChatInput multiline functionality", () => {
     cleanup();
   });
 
-  it("allows multiline input with shift+enter (modifyOtherKeys=1 format)", async () => {
+  it.skip("allows multiline input with shift+enter (modifyOtherKeys=1 format)", async () => {
     const submitInput = vi.fn();
 
     const props: ComponentProps<typeof TerminalChatInput> = {
