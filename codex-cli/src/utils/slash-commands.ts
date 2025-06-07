@@ -11,9 +11,9 @@ export interface SlashCommand {
         string,
         { name: string; baseURL: string; envKey: string }
       >;
-      models?: string[];
+      models?: Array<string>;
     },
-  ) => string[];
+  ) => Array<string>;
 }
 
 export const SLASH_COMMANDS: Array<SlashCommand> = [
@@ -43,7 +43,7 @@ export const SLASH_COMMANDS: Array<SlashCommand> = [
           string,
           { name: string; baseURL: string; envKey: string }
         >;
-        models?: string[];
+        models?: Array<string>;
       },
     ) => {
       const availableModels = context?.models || [];
@@ -76,7 +76,7 @@ export const SLASH_COMMANDS: Array<SlashCommand> = [
           string,
           { name: string; baseURL: string; envKey: string }
         >;
-        models?: string[];
+        models?: Array<string>;
       },
     ) => {
       const providerKeys = context?.providers

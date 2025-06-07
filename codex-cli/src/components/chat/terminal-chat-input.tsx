@@ -1,3 +1,30 @@
+import type {
+  ConfirmationResult,
+  // ConfirmationPrompt,
+} from "../../hooks/use-confirmation";
+
+import MultilineTextEditor, {
+  type MultilineTextEditorHandle,
+} from "./multiline-editor";
+import { TerminalChatCommandReview } from "./terminal-chat-command-review";
+import TextCompletions from "./terminal-chat-completions";
+import {
+  getFileSystemSuggestions,
+  type FileSystemSuggestion,
+} from "../../utils/file-system-suggestions";
+import { expandFileTags } from "../../utils/file-tag-utils";
+import {
+  createInputItem,
+  type ResponseInputItem,
+} from "../../utils/input-utils";
+import { SLASH_COMMANDS, type SlashCommand } from "../../utils/slash-commands";
+import {
+  loadCommandHistory,
+  addToHistory,
+  type HistoryEntry,
+} from "../../utils/storage/command-history";
+import { clearTerminal } from "../../utils/terminal";
+import { Box, Text, useInput, useApp } from "ink";
 import React, {
   useState,
   useEffect,
@@ -5,32 +32,6 @@ import React, {
   useRef,
   useMemo,
 } from "react";
-import { Box, Text, useInput, useApp } from "ink";
-import MultilineTextEditor, {
-  type MultilineTextEditorHandle,
-} from "./multiline-editor";
-import { clearTerminal } from "../../utils/terminal";
-import { SLASH_COMMANDS, type SlashCommand } from "../../utils/slash-commands";
-import TextCompletions from "./terminal-chat-completions";
-import { TerminalChatCommandReview } from "./terminal-chat-command-review";
-import type {
-  ConfirmationResult,
-  // ConfirmationPrompt,
-} from "../../hooks/use-confirmation";
-import {
-  createInputItem,
-  type ResponseInputItem,
-} from "../../utils/input-utils";
-import {
-  loadCommandHistory,
-  addToHistory,
-  type HistoryEntry,
-} from "../../utils/storage/command-history";
-import {
-  getFileSystemSuggestions,
-  type FileSystemSuggestion,
-} from "../../utils/file-system-suggestions";
-import { expandFileTags } from "../../utils/file-tag-utils";
 
 export interface TerminalChatInputProps {
   loading: boolean;
@@ -39,7 +40,7 @@ export interface TerminalChatInputProps {
   explanation?: string;
   submitConfirmation: (result: ConfirmationResult) => void;
   setLastResponseId: (id: string) => void;
-  setItems: any;
+  setItems: (items: Array<ResponseInputItem>) => void;
   openOverlay: () => void;
   openModelOverlay: () => void;
   openProviderOverlay: () => void;
@@ -48,7 +49,7 @@ export interface TerminalChatInputProps {
   openDiffOverlay: () => void;
   openSessionsOverlay: () => void;
   onCompact: () => void;
-  items: Array<any>;
+  items: Array<ResponseInputItem>;
   workdir?: string;
 }
 
@@ -147,7 +148,7 @@ export default function TerminalChatInput({
   const handleChange = useCallback(
     (value: string) => {
       setInput(value);
-      if (historyIndex !== null) {
+      if (historyIndex != null) {
         setHistoryIndex(null);
         setDraftInput("");
       }
@@ -164,7 +165,7 @@ export default function TerminalChatInput({
       }
 
       const trimmedValue = value.trim();
-      if (!trimmedValue) return;
+      if (!trimmedValue) {return;}
 
       await addToHistory(trimmedValue, history);
       await loadHistory();
@@ -277,7 +278,7 @@ export default function TerminalChatInput({
         } else {
           setInput("");
           setEditorState((prev) => ({ key: prev.key + 1 }));
-          if (input.startsWith("/")) setSelectedSlashSuggestion(0);
+          if (input.startsWith("/")) {setSelectedSlashSuggestion(0);}
         }
         return;
       }
@@ -319,7 +320,7 @@ export default function TerminalChatInput({
           setSelectedCompletion((prev) => Math.max(0, prev - 1));
         } else if (history.length > 0) {
           let newIndex;
-          if (historyIndex === null) {
+          if (historyIndex == null) {
             setDraftInput(input);
             newIndex = history.length - 1;
           } else {
@@ -341,7 +342,7 @@ export default function TerminalChatInput({
           setSelectedCompletion((prev) =>
             Math.min(fsSuggestions.length - 1, prev + 1),
           );
-        } else if (historyIndex !== null && historyIndex < history.length - 1) {
+        } else if (historyIndex != null && historyIndex < history.length - 1) {
           const newIndex = historyIndex + 1;
           setHistoryIndex(newIndex);
           const newCmd = history[newIndex]?.command || "";
@@ -351,7 +352,7 @@ export default function TerminalChatInput({
             initialCursorOffset: newCmd.length,
           }));
         } else if (
-          historyIndex !== null &&
+          historyIndex != null &&
           historyIndex === history.length - 1
         ) {
           setHistoryIndex(null);

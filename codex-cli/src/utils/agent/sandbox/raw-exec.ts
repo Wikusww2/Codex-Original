@@ -5,9 +5,9 @@ import type { ChildProcess, SpawnOptions } from "child_process";
 import { log } from "../../logger/log.js";
 import { adaptCommandForPlatform } from "../platform-commands.js";
 import { createTruncatingCollector } from "./create-truncating-collector";
+import { requiresShell as utilRequiresShell } from "../exec";
 import { spawn } from "child_process";
 import * as os from "os";
-import { requiresShell as utilRequiresShell } from "../exec";
 import kill from "tree-kill";
 
 /**
@@ -20,13 +20,11 @@ export function exec(
   config: AppConfig,
   abortSignal?: AbortSignal,
 ): Promise<ExecResult> {
-  log(
-    `[raw-exec] exec called with originalCmd: ${JSON.stringify(originalCmd)}, workdir: ${options.cwd}`,
-  );
+
 
   // Adapt command for the current platform (e.g., convert 'ls' to 'dir' on Windows)
   let adaptedCommand = adaptCommandForPlatform(originalCmd); // Updated - changed to let for mutability
-  log(`[raw-exec] adaptedCommand: ${JSON.stringify(adaptedCommand)}`);
+
 
   // Check if this is a PowerShell command
   const isPowerShellCommand =
@@ -47,22 +45,16 @@ export function exec(
           // Escape single quotes by replacing ' with '' (PowerShell escaping) and wrap in single quotes
           powershellScript = powershellScript.replace(/'/g, "''");
           // For logging purposes only
-          console.log(
-            `[raw-exec] Original PowerShell script: ${powershellScript}`,
-          );
+
         }
         // Replace the original arguments with a properly escaped single command
         const shellCommand = adaptedCommand[0] || "powershell";
         adaptedCommand = [shellCommand, "-Command", powershellScript];
-        console.log(
-          `[raw-exec] Reformatted PowerShell command: ${JSON.stringify(adaptedCommand)}`,
-        );
+
 
         // For logging purposes only
         if (process.platform === "win32") {
-          console.log(
-            `[raw-exec] PowerShell command to execute directly in PowerShell: ${powershellScript}`,
-          );
+
         }
       }
     }
@@ -70,9 +62,6 @@ export function exec(
 
   // Either use the requiresShell function or force shell for PowerShell commands
   const needsShell = isPowerShellCommand || utilRequiresShell(adaptedCommand);
-  console.log(
-    `[raw-exec] utilRequiresShell for adaptedCommand returned: ${needsShell} (isPowerShellCommand: ${isPowerShellCommand})`,
-  );
 
   if (JSON.stringify(adaptedCommand) !== JSON.stringify(originalCmd)) {
     // Updated
@@ -126,12 +115,6 @@ export function exec(
     detached: true, // Launch in its own process group for reliable termination
     ...(needsShell ? { shell: true } : {}), // Conditionally add shell option
   };
-  console.log(
-    `[raw-exec] Calculated spawnOptionsForExec: ${JSON.stringify(spawnOptionsForExec)}`,
-  );
-  console.log(
-    `[raw-exec] Spawning: executable='${prog}', args=${JSON.stringify(adaptedCommand.slice(1))}`,
-  );
 
   const child: ChildProcess = spawn(
     prog,
@@ -235,10 +218,6 @@ export function exec(
       } else {
         exitCode = 1;
       }
-
-      log(
-        `raw-exec: child ${child.pid} exited code=${exitCode} signal=${signal}`,
-      );
 
       const execResult = {
         stdout,

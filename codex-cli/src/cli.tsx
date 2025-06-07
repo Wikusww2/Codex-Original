@@ -26,7 +26,7 @@ import type {
 } from "./approvals";
 import type { CommandConfirmation } from "./utils/agent/agent-loop";
 import type { AppConfig } from "./utils/config";
-import type { ResponseItem } from "openai/resources/responses/responses";
+import type { ResponseItem as OpenAiSdkResponseItem, ResponseFunctionToolCall } from "openai/resources/responses/responses.mjs";
 import type { ReasoningEffort } from "openai/resources.mjs";
 
 import App from "./app";
@@ -563,6 +563,8 @@ if (cli.flags.quiet) {
 // 4. config.approvalMode - use the approvalMode setting from ~/.codex/config.json.
 // 5. Default – suggest mode (prompt for everything).
 
+
+
 const approvalPolicy: ApprovalPolicy =
   cli.flags.fullAuto || cli.flags.approvalMode === "full-auto"
     ? ResolvedAAM.FULL_AUTO
@@ -586,7 +588,48 @@ const instance = render(
 );
 setInkRenderer(instance);
 
-function formatResponseItemForQuietMode(item: ResponseItem): string {
+type CustomContentPart =
+  | { type: "output_text"; text: string }
+  | { type: "input_text"; text: string }
+  | { type: "input_image"; [key: string]: unknown } // Define more strictly if image props are used
+  | { type: "input_file"; filename: string }
+  | { type: "refusal"; refusal: string };
+
+type ExecOutputMetadata = {
+  exit_code?: number;
+  duration_seconds?: number;
+  // other potential metadata fields
+};
+
+type CliResponseMessageItem = {
+  id?: string;
+  type: "message";
+  role: "user" | "assistant" | "system" | "developer" | string; // Allow other roles as string
+  content: Array<CustomContentPart>;
+};
+
+type CliFunctionToolCallItem = {
+  id?: string;
+  type: "function_call";
+  name: string;
+  arguments?: string; // Consumed by parseToolCall
+};
+
+type CliFunctionToolCallOutputItem = {
+  id?: string;
+  type: "function_call_output";
+  output: string;
+  tool_call_id?: string;
+  metadata?: ExecOutputMetadata;
+};
+
+// Union type for items formatted by this function
+type CliResponseItem =
+  | CliResponseMessageItem
+  | CliFunctionToolCallItem
+  | CliFunctionToolCallOutputItem;
+
+function formatResponseItemForQuietMode(item: CliResponseItem): string {
   if (!PRETTY_PRINT) {
     return JSON.stringify(item);
   }
@@ -594,7 +637,7 @@ function formatResponseItemForQuietMode(item: ResponseItem): string {
     case "message": {
       const role = item.role === "assistant" ? "assistant" : item.role;
       const txt = item.content
-        .map((c) => {
+        .map((c: CustomContentPart) => {
           if (c.type === "output_text" || c.type === "input_text") {
             return c.text;
           }
@@ -613,12 +656,21 @@ function formatResponseItemForQuietMode(item: ResponseItem): string {
       return `${role}: ${txt}`;
     }
     case "function_call": {
-      const details = parseToolCall(item);
-      return `$ ${details?.cmdReadableText ?? item.name}`;
+      // item is CliFunctionToolCallItem: { id?, type: "function_call", name: string, arguments?: string }
+      // parseToolCall expects: OpenAI.Chat.Completions.ChatCompletionMessageToolCallPart
+      // which is { id: string, type: 'function', function: {name: string, arguments: string} }
+      const sdkToolCallArg: ResponseFunctionToolCall = {
+        call_id: item.id || "cli_tool_call_id", // Renamed from id to call_id
+        type: 'function_call',
+        name: item.name, // Top-level name
+        arguments: item.arguments || "{}", // Top-level arguments, ensure it's a string
+      };
+      const details = parseToolCall(sdkToolCallArg);
+      return `$ ${details?.cmdReadableText ?? item.name}`; // Use item.name directly
     }
     case "function_call_output": {
-      // @ts-expect-error metadata unknown on ResponseFunctionToolCallOutputItem
-      const meta = item.metadata as ExecOutputMetadata;
+      // Cast item to CliFunctionToolCallOutputItem to access potentially attached metadata
+      const meta = (item as CliFunctionToolCallOutputItem).metadata;
       const parts: Array<string> = [];
       if (typeof meta?.exit_code === "number") {
         parts.push(`code: ${meta.exit_code}`);
@@ -627,10 +679,7 @@ function formatResponseItemForQuietMode(item: ResponseItem): string {
         parts.push(`duration: ${meta.duration_seconds}s`);
       }
       const header = parts.length > 0 ? ` (${parts.join(", ")})` : "";
-      return `command.stdout${header}\n${item.output}`;
-    }
-    default: {
-      return JSON.stringify(item);
+      return `command.stdout${header}\n${item.output}`; // item.output is now safe due to CliFunctionToolCallOutputItem
     }
   }
 }
@@ -656,16 +705,16 @@ async function runQuietMode({
     approvalPolicy,
     additionalWritableRoots,
     disableResponseStorage: config.disableResponseStorage,
-    onItem: (item: ResponseItem) => {
+    onItem: (sdkItem: OpenAiSdkResponseItem) => {
       // eslint-disable-next-line no-console
-      console.log(formatResponseItemForQuietMode(item));
+      console.log(formatResponseItemForQuietMode(sdkItem as CliResponseItem));
     },
     onLoading: () => {
       /* intentionally ignored in quiet mode */
     },
     getCommandConfirmation: async (
       _safetyAssessment: SafetyAssessment,
-      command: string[],
+      command: Array<string>,
       _applyPatch: ApplyPatchCommand | undefined,
     ): Promise<CommandConfirmation> => {
       // In quiet mode, default to NO_CONTINUE, except when in full-auto mode

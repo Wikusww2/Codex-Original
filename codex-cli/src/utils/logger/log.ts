@@ -88,7 +88,7 @@ export function initLogger(debugMode?: boolean): Logger {
     return logger;
   } else if (
     debugMode === false ||
-    (debugMode === undefined && !process.env["DEBUG"])
+    (debugMode === undefined && process.env["DEBUG_CODEX_FILE_LOGGING"] !== "true")
   ) {
     logger = new EmptyLogger();
     return logger;

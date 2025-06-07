@@ -4,9 +4,9 @@ import {
   identify_files_added,
   identify_files_needed,
 } from "./utils/agent/apply-patch";
+import { AutoApprovalMode } from "./utils/auto-approval-mode.js";
 import * as path from "path";
 import { parse } from "shell-quote";
-import { AutoApprovalMode } from "./utils/auto-approval-mode.js";
 
 export type SafetyAssessment = {
   /**
@@ -231,10 +231,8 @@ function canAutoApproveApplyPatch(
       // Continue to see if this can be auto-approved.
       break;
     case "suggest":
-      return {
-        type: "ask-user",
-        applyPatch: { patch: applyPatchArg },
-      };
+      // Continue to see if this can be auto-approved.
+      break;
     case "auto-edit":
       // Continue to see if this can be auto-approved.
       break;
@@ -412,7 +410,7 @@ export function isSafeCommand(
     };
   }
 
-  let workingCmdArray = [...command]; // Use a mutable copy
+  const workingCmdArray = [...command]; // Use a mutable copy
 
   // Handle agent wrapping 'dir > file.txt' in single quotes,
   // resulting in cmdArray being ["'dir > file.txt'"].
@@ -474,11 +472,11 @@ export function isSafeCommand(
       if (
         cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$"))
       )
-        return null;
+        {return null;}
       return { reason: "List files/List directory", group: "Reading files" };
     },
     dir: (cmdArray: ReadonlyArray<string>) => {
-      if (process.platform !== "win32") return null;
+      if (process.platform !== "win32") {return null;}
       // Allow 'dir'
       if (cmdArray.length === 1 && cmdArray[0]?.toLowerCase() === "dir") {
         return { reason: "List directory contents", group: "File system" };
@@ -502,7 +500,7 @@ export function isSafeCommand(
       for (let i = 1; i < cmdArray.length; i++) {
         const arg = cmdArray[i];
         // Handle potential null/undefined from split if it occurs
-        if (arg === null || arg === undefined) {
+        if (arg == null) {
           // Consider this malformed and unsafe
           return null;
         }
@@ -551,7 +549,7 @@ export function isSafeCommand(
       if (
         cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$"))
       )
-        return null;
+        {return null;}
       return { reason: "View file contents", group: "Reading files" };
     },
     nl: (_cmdArray: ReadonlyArray<string>) => ({
@@ -566,7 +564,7 @@ export function isSafeCommand(
       if (
         cmdArray.slice(1).some((arg) => arg.includes("`") || arg.includes("$"))
       )
-        return null;
+        {return null;}
       return { reason: "Text search (grep)", group: "Searching" };
     },
     head: (_cmdArray: ReadonlyArray<string>) => ({
@@ -583,7 +581,7 @@ export function isSafeCommand(
     }),
     git: (cmdArray: ReadonlyArray<string>) => {
       const subCommand = cmdArray[1]?.toLowerCase();
-      if (!subCommand) return null;
+      if (!subCommand) {return null;}
 
       const safeSubCommands: Record<string, string> = {
         "status": "View status",
@@ -621,7 +619,7 @@ export function isSafeCommand(
           cmdArray.length > 2
         ) {
           if (cmdArray.slice(2).every((arg) => !arg.startsWith("-")))
-            return null;
+            {return null;}
         }
         return {
           reason: reasonForSubCommand, // Now reasonForSubCommand is confirmed to be a string
@@ -657,7 +655,7 @@ export function isSafeCommand(
       return null;
     },
     start: (cmdArray: ReadonlyArray<string>) => {
-      if (process.platform !== "win32") return null; // 'start' is Windows-specific
+      if (process.platform !== "win32") {return null;} // 'start' is Windows-specific
 
       if (cmdArray.length === 2) {
         // Case: start <file_path>
@@ -697,7 +695,7 @@ export function isSafeCommand(
       return null; // Unhandled 'start' command pattern or unsafe arguments
     },
     cmd: (cmdArray: ReadonlyArray<string>) => {
-      if (process.platform !== "win32") return null;
+      if (process.platform !== "win32") {return null;}
       // Allow 'cmd /c dir'
       if (
         cmdArray.length === 3 &&
@@ -748,7 +746,7 @@ export function isSafeCommand(
       group: "Reading files",
     }),
     type: (cmdArray: ReadonlyArray<string>) => {
-      if (process.platform !== "win32") return null;
+      if (process.platform !== "win32") {return null;}
       // Allow 'type filename.ext'
       if (
         cmdArray.length === 2 &&

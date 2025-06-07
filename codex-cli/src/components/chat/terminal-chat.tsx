@@ -1,59 +1,61 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Box, useStdout } from "ink";
-import chalk from "chalk";
-import { spawn } from "node:child_process";
-import { inspect } from "util";
-import fs from "fs/promises";
-import pkg from "../../../../package.json" with { type: "json" };
 
 // Type Imports
-import type { CommandConfirmation } from "../../utils/agent/agent-loop.js";
+import type { TerminalHeaderProps } from "./terminal-header.js";
+import type { BatchEntry } from "./terminal-message-history.js";
+import type { AppRollout } from "../../app.js";
 import type {
   ApprovalPolicy,
   ApplyPatchCommand,
   SafetyAssessment,
 } from "../../approvals.js";
-import { AutoApprovalMode } from "../../utils/auto-approval-mode.js";
+import type { ConfirmationResult } from "../../hooks/use-confirmation.js";
+import type { CommandConfirmation } from "../../utils/agent/agent-loop.js";
 import type { AppConfig } from "../../utils/config.js";
 import type {
   ResponseItem,
   ResponseInputItem,
+  ResponseFunctionToolCall,
 } from "openai/resources/responses/responses.mjs";
-import type { AppRollout } from "../../app.js";
-import type { ConfirmationResult } from "../../hooks/use-confirmation.js";
-import type { TerminalHeaderProps } from "./terminal-header.js";
-import type { BatchEntry } from "./terminal-message-history.js";
+import { v4 as uuidv4 } from 'uuid';
 
 // Codegen utils and core logic
-import { AgentLoop } from "../../utils/agent/agent-loop.js";
-import { ReviewDecision } from "../../utils/agent/review.js";
-import { createOpenAIClient } from "../../utils/openai-client.js";
-import { log } from "../../utils/logger/log.js";
-import { saveConfig } from "../../utils/config.js";
-import {
-  uniqueById,
-  isUserMessage, // Added import for isUserMessage
-} from "../../utils/model-utils.js";
-import { formatCommandForDisplay } from "../../format-command.js";
-import { generateCompactSummary } from "../../utils/compact-summary.js";
 
 // Hooks
-import { useConfirmation } from "../../hooks/use-confirmation.js";
 
 // Local Components
 import TerminalChatInput from "./terminal-chat-input.js";
 import TerminalChatPastRollout from "./terminal-chat-past-rollout.js";
-import TerminalMessageHistory from "./terminal-message-history.js";
 import {
   TerminalChatToolCallCommand,
   TerminalChatToolCallApplyPatch,
 } from "./terminal-chat-tool-call-command.js";
+import TerminalMessageHistory from "./terminal-message-history.js";
+import pkg from "../../../../package.json" with { type: "json" };
+import { formatCommandForDisplay } from "../../format-command.js";
+import { useConfirmation } from "../../hooks/use-confirmation.js";
+import { AgentLoop } from "../../utils/agent/agent-loop.js";
+import { ReviewDecision } from "../../utils/agent/review.js";
+import { AutoApprovalMode } from "../../utils/auto-approval-mode.js";
+import { generateCompactSummary } from "../../utils/compact-summary.js";
+import { saveConfig } from "../../utils/config.js";
+import { log } from "../../utils/logger/log.js";
+import {
+  uniqueById,
+  isUserMessage, // Added import for isUserMessage
+} from "../../utils/model-utils.js";
+import { createOpenAIClient } from "../../utils/openai-client.js";
 import ApprovalModeOverlay from "../approval-mode-overlay.js";
 import DiffOverlay from "../diff-overlay.js";
 import HelpOverlay from "../help-overlay.js";
 import HistoryOverlay from "../history-overlay.js";
 import ModelOverlay from "../model-overlay.js";
 import SessionsOverlay from "../sessions-overlay.js";
+import chalk from "chalk";
+import fs from "fs/promises";
+import { Box, useStdout } from "ink";
+import { spawn } from "node:child_process";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { inspect } from "util";
 
 // Local type definitions if not imported
 export type OverlayModeType =
@@ -216,6 +218,39 @@ export const TerminalChat: React.FC<Props> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSetItemsFromInput = (inputItems: ResponseInputItem[]) => {
+    const newItems = inputItems.map((item) => {
+      if (item.type === "function_call") {
+        const toolCallItem = item as ResponseFunctionToolCall;
+        return {
+          ...toolCallItem,
+          id: toolCallItem.id ?? uuidv4(),
+        } as ResponseItem;
+      }
+      // For other types, ensure they are correctly cast to ResponseItem if necessary.
+      // This example assumes other ResponseInputItem types are directly assignable to ResponseItem subtypes
+      // or that they don't have the id issue.
+      return item as ResponseItem;
+    });
+    // It's important to ensure that `setItems` receives an array of `ResponseItem`.
+    // If `newItems` might not fully conform, further checks or transformations might be needed here.
+    setItems(prevItems => {
+      // This example replaces the entire list. Depending on requirements,
+      // you might want to append or merge.
+      // Also, consider if unique IDs are needed across all items if merging.
+      const updatedItems = [...prevItems];
+      newItems.forEach(newItem => {
+        const existingIndex = updatedItems.findIndex(existingItem => existingItem.id === newItem.id);
+        if (existingIndex !== -1 && newItem.id !== undefined) {
+          updatedItems[existingIndex] = newItem; // Update existing item
+        } else {
+          updatedItems.push(newItem); // Add new item
+        }
+      });
+      return uniqueById(updatedItems);
+    });
   };
 
   const [overlayMode, setOverlayMode] = useState<OverlayModeType>("none");
@@ -425,7 +460,7 @@ export const TerminalChat: React.FC<Props> = ({
   }, [agent]);
 
   const safeItems = useMemo(() => items ?? [], [items]);
-  const batch: BatchEntry[] = useMemo(
+  const batch: Array<BatchEntry> = useMemo(
     () => safeItems.map((item) => ({ item })),
     [safeItems],
   );
@@ -451,7 +486,7 @@ export const TerminalChat: React.FC<Props> = ({
 
   useEffect(() => {
     const processInitialInput = async () => {
-      if (initialPromptProcessed.current || !agentRef.current) return;
+      if (initialPromptProcessed.current || !agentRef.current) {return;}
       if (
         (!initialPromptFromProps || initialPromptFromProps.trim() === "") &&
         (!currentImagePaths || currentImagePaths.length === 0) // Use renamed state variable
@@ -462,7 +497,7 @@ export const TerminalChat: React.FC<Props> = ({
         `[TerminalChat] Processing initial prompt: "${initialPromptFromProps}"`,
       );
       if (agentRef.current) {
-        const inputs: ResponseInputItem[] = [];
+        const inputs: Array<ResponseInputItem> = [];
         if (initialPromptFromProps && initialPromptFromProps.trim() !== "") {
           inputs.push({
             type: "message",
@@ -500,7 +535,7 @@ export const TerminalChat: React.FC<Props> = ({
       log("Model availability check would happen here.");
     })();
     // run once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [provider, model]);
 
   if (viewRollout) {
@@ -541,7 +576,7 @@ export const TerminalChat: React.FC<Props> = ({
             agentRef.current?.run(inputs, lastResponseId || "");
           }}
           setLastResponseId={setLastResponseId}
-          setItems={setItems}
+          setItems={handleSetItemsFromInput}
           openOverlay={() => setOverlayMode("help")}
           openModelOverlay={() => setOverlayMode("model")}
           openProviderOverlay={() => setOverlayMode("provider")}
