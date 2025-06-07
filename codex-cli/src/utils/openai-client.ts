@@ -42,10 +42,21 @@ export function createOpenAIClient(
     });
   }
 
-  return new OpenAI({
+  const commonOptions = {
     apiKey: getApiKey(config.provider),
     baseURL: getBaseUrl(config.provider),
     timeout: OPENAI_TIMEOUT_MS,
     defaultHeaders: headers,
-  });
+  };
+
+  if (config.provider?.toLowerCase() === "gemini") {
+    // Using console.log as the main `log` utility might not be set up here or could be circular
+    console.log("[openai-client] Applying dangerouslyAllowBrowser: true for Gemini provider");
+    return new OpenAI({
+      ...commonOptions,
+      dangerouslyAllowBrowser: true,
+    });
+  }
+
+  return new OpenAI(commonOptions);
 }
