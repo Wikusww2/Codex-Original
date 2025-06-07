@@ -23,7 +23,7 @@ async function type(
 // -------------------------------------------------------------------------------------------------
 
 describe("/clear command", () => {
-  it("invokes clearTerminal and resets context in TerminalChatInput", async () => {
+  it("invokes clearTerminal and resets context in TerminalChatInput", async (): Promise<void> => {
     const clearSpy = vi
       .spyOn(TermUtils, "clearTerminal")
       .mockImplementation(() => {});
@@ -48,7 +48,6 @@ describe("/clear command", () => {
       submitConfirmation: () => {},
       setLastResponseId: () => {},
       setItems,
-      contextLeftPercent: 100,
       openOverlay: () => {},
       openModelOverlay: () => {},
       openProviderOverlay: () => {},
@@ -57,9 +56,6 @@ describe("/clear command", () => {
       openDiffOverlay: () => {},
       openSessionsOverlay: () => {},
       onCompact: () => {},
-      interruptAgent: () => {},
-      active: true,
-      thinkingSeconds: 0,
       items: existingItems,
     };
 
@@ -95,7 +91,7 @@ describe("/clear command", () => {
 });
 
 describe("clearTerminal", () => {
-  it("writes escape sequence to stdout", () => {
+  it("writes escape sequence to stdout", (): void => {
     const originalQuiet = process.env["CODEX_QUIET_MODE"];
     delete process.env["CODEX_QUIET_MODE"];
 
