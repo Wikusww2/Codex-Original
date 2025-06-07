@@ -19,7 +19,7 @@
     "test:watch": "vitest --watch",
     "typecheck": "tsc --noEmit",
     "build": "node build.mjs",
-    "build:dev": "cross-env NODE_ENV=development node build.mjs --dev && cross-env NODE_OPTIONS=--enable-source-maps node dist/cli-dev.js",
+    "build:dev": "cross-env NODE_ENV=development node build.mjs --dev && cross-env NODE_OPTIONS=--enable-source-maps node dist/cli.js",
     "stage-release": "./scripts/stage_release.sh"
   },
   "files": [
