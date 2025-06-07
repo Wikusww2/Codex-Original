@@ -13,6 +13,7 @@ import type {
   ApplyPatchCommand,
   SafetyAssessment,
 } from "../../approvals.js";
+import { AutoApprovalMode } from "../../utils/auto-approval-mode.js";
 import type { AppConfig } from "../../utils/config.js";
 import type {
   ResponseItem,
@@ -170,8 +171,9 @@ export const TerminalChat: React.FC<Props> = ({
 
   const colorsByPolicy: Record<string, string | undefined> = {
     "full-auto": "green",
+    [AutoApprovalMode.FULL_AUTO]: "green",
+    [AutoApprovalMode.NONE]: "red",
     "needs-confirmation": "yellow",
-    "none": "red",
     "manual": "cyan",
   };
 
@@ -275,11 +277,10 @@ export const TerminalChat: React.FC<Props> = ({
         applyPatch: ApplyPatchCommand | undefined,
       ): Promise<CommandConfirmation> => {
         // Always auto-approve commands in full-auto or none modes
-        // Handle both "full-auto" (code) and "full_auto" (UI) formats
         if (
           approvalPolicy === "full-auto" ||
-          approvalPolicy === "full_auto" ||
-          approvalPolicy === "none"
+          approvalPolicy === AutoApprovalMode.FULL_AUTO ||
+          approvalPolicy === AutoApprovalMode.NONE
         ) {
           // Only reject commands that have been explicitly marked as reject
           if (safetyAssessment.type === "reject") {
