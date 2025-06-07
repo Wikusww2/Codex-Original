@@ -158,9 +158,9 @@ export function canAutoApprove(
       if (isFullAutoOrNone(policy)) {
         return {
           type: "auto-approve",
-          reason: `${policy === "full-auto" ? "Full auto" : "None"} mode (unparseable bash command)`,
+          reason: `${policy === "full-auto" ? "Full auto" : "None"} mode (unparsable bash command)`,
           group: "Running commands",
-          runInSandbox: policy === "full-auto", // Keep sandbox for unparseable bash in full-auto, but not in none
+          runInSandbox: policy === "full-auto", // Keep sandbox for unparsable bash in full-auto, but not in none
         };
       } else {
         // For suggest and auto-edit policies
