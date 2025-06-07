@@ -276,10 +276,6 @@ export const TerminalChat: React.FC<Props> = ({
         commandForConfirmation: Array<string>,
         applyPatch: ApplyPatchCommand | undefined,
       ): Promise<CommandConfirmation> => {
-        console.log(
-          `[Codex Debug] TerminalChat.getCommandConfirmation: approvalPolicy state is '${approvalPolicy}'`,
-        );
-
         // Always auto-approve commands in full-auto or none modes
         // Handle both "full-auto" (code) and "full_auto" (UI) formats
         if (
