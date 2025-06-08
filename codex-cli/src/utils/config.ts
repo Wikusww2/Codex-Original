@@ -199,6 +199,8 @@ export interface StoredConfig {
   /** Disable server-side response storage (send full transcript each request) */
   disableResponseStorage?: boolean;
   flexMode?: boolean;
+  /** Enable web search capabilities */
+  webAccess?: boolean;
   providers?: Record<string, { name: string; baseURL: string; envKey: string; defaultModel?: string; }>;
   history?: {
     maxSize?: number;
@@ -253,6 +255,8 @@ export type AppConfig = {
 
   /** Enable the "flex-mode" processing mode for supported models (o3, o4-mini) */
   flexMode?: boolean;
+  /** Enable web search capabilities */
+  webAccess?: boolean;
   providers?: Record<string, { name: string; baseURL: string; envKey: string; defaultModel: string }>;
   history?: {
     maxSize: number;
@@ -556,6 +560,12 @@ export const loadConfig = (
   if (storedConfig.flexMode !== undefined) {
     config.flexMode = storedConfig.flexMode;
   }
+  // Web access setting: enable web search when set in config
+  if (storedConfig.webAccess !== undefined) {
+    config.webAccess = storedConfig.webAccess;
+  } else {
+    config.webAccess = false;
+  }
 
   // Add default history config if not provided
   if (storedConfig.history !== undefined) {
@@ -644,6 +654,7 @@ export const saveConfig = (
     approvalMode: config.approvalMode,
     disableResponseStorage: config.disableResponseStorage,
     flexMode: config.flexMode,
+    webAccess: config.webAccess,
     reasoningEffort: config.reasoningEffort,
     providerApiKeys: config.providerApiKeys,
   };

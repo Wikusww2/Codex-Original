@@ -51,6 +51,7 @@ import HelpOverlay from "../help-overlay.js";
 import HistoryOverlay from "../history-overlay.js";
 import ModelOverlay from "../model-overlay.js";
 import SessionsOverlay from "../sessions-overlay.js";
+import WebAccessOverlay from "../web-access-overlay.js";
 import chalk from "chalk";
 import fs from "fs/promises";
 import { Box, useStdout } from "ink";
@@ -67,6 +68,7 @@ export type OverlayModeType =
   | "model"
   | "provider"
   | "approval"
+  | "web"
   | "diff"
   | "help";
 
@@ -171,6 +173,7 @@ export const TerminalChat: React.FC<Props> = ({
   const [lastResponseId, setLastResponseId] = useState<string | null>(null);
   const [items, setItems] = useState<Array<ResponseItem>>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [webAccess, setWebAccess] = useState<boolean>(config.webAccess ?? false);
 
   const [, forceRender] = useState(0);
   const forceUpdate = () => forceRender((c) => c + 1);
@@ -490,6 +493,7 @@ export const TerminalChat: React.FC<Props> = ({
     agent: agentRef.current ?? undefined,
     initialImagePaths: currentImagePaths, // Use renamed state variable for header
     flexModeEnabled: config.flexMode,
+    webAccessEnabled: webAccess,
     workdir: workdir,
   };
 
@@ -597,6 +601,7 @@ export const TerminalChat: React.FC<Props> = ({
           openHelpOverlay={() => setOverlayMode("help")}
           openDiffOverlay={() => setOverlayMode("diff")}
           openSessionsOverlay={() => setOverlayMode("sessions")}
+          openWebOverlay={() => setOverlayMode("web")}
           onCompact={handleCompact}
           items={safeItems}
           workdir={workdir}
@@ -839,6 +844,17 @@ export const TerminalChat: React.FC<Props> = ({
               return;
             }
             setOverlayMode("none");
+          }}
+          onExit={() => setOverlayMode("none")}
+        />
+      )}
+
+      {overlayMode === "web" && (
+        <WebAccessOverlay
+          enabled={webAccess}
+          onToggle={(val) => {
+            setWebAccess(val);
+            saveConfig({ ...config, webAccess: val });
           }}
           onExit={() => setOverlayMode("none")}
         />

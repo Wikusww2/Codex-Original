@@ -48,6 +48,7 @@ export interface TerminalChatInputProps {
   openHelpOverlay: () => void;
   openDiffOverlay: () => void;
   openSessionsOverlay: () => void;
+  openWebOverlay: () => void;
   onCompact: () => void;
   items: Array<ResponseInputItem>;
   workdir?: string;
@@ -68,6 +69,7 @@ export default function TerminalChatInput({
   openHelpOverlay,
   openDiffOverlay,
   openSessionsOverlay,
+  openWebOverlay,
   onCompact,
   items = [],
   workdir,
@@ -213,6 +215,10 @@ export default function TerminalChatInput({
             openApprovalOverlay();
             return;
           }
+          if (command.command === "/web") {
+            openWebOverlay();
+            return;
+          }
           if (command.command === "/sessions") {
             openSessionsOverlay();
             return;
@@ -259,6 +265,7 @@ export default function TerminalChatInput({
       openModelOverlay,
       openProviderOverlay,
       openApprovalOverlay,
+      openWebOverlay,
       openSessionsOverlay,
       setLastResponseId,
       submitInput,
