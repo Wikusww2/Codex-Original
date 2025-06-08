@@ -61,8 +61,8 @@ describe("canAutoApprove()", () => {
     });
     expect(check(["bash", "-lc", "git show ab9811cb90"])).toEqual({
       type: "auto-approve",
-      reason: "Git show",
-      group: "Using git",
+      reason: "View specific commit/object",
+      group: "Versioning",
       runInSandbox: false,
     });
   });
