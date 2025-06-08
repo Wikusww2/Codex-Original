@@ -14,6 +14,7 @@
     "resolveJsonModule": true, // ESM doesn't yet support JSON modules.
     "esModuleInterop": true,
     "jsx": "react",
+    "allowJs": true,
     "declaration": true,
     "newLine": "lf",
     "stripInternal": true,
