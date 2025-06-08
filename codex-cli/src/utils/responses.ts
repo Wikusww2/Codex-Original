@@ -7,6 +7,8 @@ import type {
   FunctionTool,
 } from "openai/resources/responses/responses";
 
+import { loadConfig } from "./config.js";
+
 // Define interfaces based on OpenAI API documentation
 type ResponseCreateInput = ResponseCreateParams;
 type ResponseOutput = Response;
@@ -315,7 +317,7 @@ const createCompletion = (
   //   "[responses.ts] About to call openai.chat.completions.create. Current function source:",
   //   openai.chat.completions.create.toString(),
   // );
-  const currentProvider = sessionConfig.provider?.toLowerCase();
+  const currentProvider = sessionConfig?.provider?.toLowerCase() ?? "openai";
 
   if (currentProvider === "deepseek") {
     const requestOptions: OpenAI.RequestOptions = { path: "/chat/completions" };
@@ -330,17 +332,17 @@ const createCompletion = (
 async function responsesCreateViaChatCompletions(
   openai: OpenAI,
   input: ResponseCreateInput & { stream: true },
-  sessionConfig: AppConfig,
+  sessionConfig: AppConfig = loadConfig(),
 ): Promise<AsyncGenerator<ResponseEvent>>;
 async function responsesCreateViaChatCompletions(
   openai: OpenAI,
   input: ResponseCreateInput & { stream?: false },
-  sessionConfig: AppConfig,
+  sessionConfig: AppConfig = loadConfig(),
 ): Promise<ResponseOutput>;
 async function responsesCreateViaChatCompletions(
   openai: OpenAI,
   input: ResponseCreateInput,
-  sessionConfig: AppConfig,
+  sessionConfig: AppConfig = loadConfig(),
 ): Promise<ResponseOutput | AsyncGenerator<ResponseEvent>> {
   // console.log(`[responses.ts DEBUG] responsesCreateViaChatCompletions received sessionConfig.provider: ${sessionConfig.provider}`);
   // console.log(
