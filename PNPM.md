@@ -17,7 +17,7 @@ This project has been migrated from npm to pnpm to improve dependency management
 # Global installation of pnpm
 npm install -g pnpm@10.8.1
 
-# Or with corepack (available with Node.js 20+)
+# Or with corepack (available with Node.js 22+)
 corepack enable
 corepack prepare pnpm@10.8.1 --activate
 ```
@@ -67,4 +67,4 @@ If you encounter issues with pnpm, try the following solutions:
 
 1. Remove the `node_modules` folder and `pnpm-lock.yaml` file, then run `pnpm install`
 2. Make sure you're using pnpm 10.8.1 or higher
-3. Verify that Node.js 20 or higher is installed
+3. Verify that Node.js 22 or higher is installed
