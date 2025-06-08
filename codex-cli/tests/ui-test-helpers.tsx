@@ -1,7 +1,8 @@
-import type React from "react";
 
 import { render } from "ink-testing-library";
 import stripAnsi from "strip-ansi";
+
+import type React from "react";
 
 /**
  * Render an Ink component for testing.
@@ -10,7 +11,12 @@ import stripAnsi from "strip-ansi";
  * yields the latest rendered frame with ANSI escape codes removed so that
  * assertions can be colour‑agnostic.
  */
-export function renderTui(ui: React.ReactElement): any {
+export function renderTui(
+  ui: React.ReactElement,
+): ReturnType<typeof render> & {
+  lastFrameStripped: () => string;
+  flush: () => Promise<void>;
+} {
   const utils = render(ui);
 
   const lastFrameStripped = () => stripAnsi(utils.lastFrame() || "");
