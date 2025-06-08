@@ -91,4 +91,5 @@ export const SLASH_COMMANDS: Array<SlashCommand> = [
       );
     },
   },
+  { command: "/web", description: "Toggle web access" },
 ];
