@@ -1,4 +1,5 @@
 import type { AppConfig } from "./config.js";
+import { loadConfig } from "./config.js";
 import type { OpenAI } from "openai";
 import type {
   ResponseCreateParams,
@@ -330,23 +331,27 @@ const createCompletion = (
 async function responsesCreateViaChatCompletions(
   openai: OpenAI,
   input: ResponseCreateInput & { stream: true },
-  sessionConfig: AppConfig,
+  sessionConfig?: AppConfig,
 ): Promise<AsyncGenerator<ResponseEvent>>;
 async function responsesCreateViaChatCompletions(
   openai: OpenAI,
   input: ResponseCreateInput & { stream?: false },
-  sessionConfig: AppConfig,
+  sessionConfig?: AppConfig,
 ): Promise<ResponseOutput>;
 async function responsesCreateViaChatCompletions(
   openai: OpenAI,
   input: ResponseCreateInput,
-  sessionConfig: AppConfig,
+  sessionConfig?: AppConfig,
 ): Promise<ResponseOutput | AsyncGenerator<ResponseEvent>> {
-  // console.log(`[responses.ts DEBUG] responsesCreateViaChatCompletions received sessionConfig.provider: ${sessionConfig.provider}`);
+  // console.log(`[responses.ts DEBUG] responsesCreateViaChatCompletions received sessionConfig.provider: ${sessionConfig?.provider}`);
+  const config = sessionConfig ?? loadConfig();
+  if (!config.provider) {
+    config.provider = "openai";
+  }
   // console.log(
   //   `[responses.ts] responsesCreateViaChatCompletions called with model: ${JSON.stringify(input.model, null, 2)}`,
   // ); // Log model for brevity
-  const completion = await createCompletion(openai, input, sessionConfig);
+  const completion = await createCompletion(openai, input, config);
   if (input.stream) {
     return streamResponses(
       input,
