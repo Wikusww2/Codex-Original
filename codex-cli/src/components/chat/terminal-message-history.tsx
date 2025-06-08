@@ -6,8 +6,9 @@ import type { FileOpenerScheme } from "src/utils/config.js";
 
 import TerminalChatResponseItem from "./terminal-chat-response-item.js";
 import TerminalHeader from "./terminal-header.js";
-import { Box, Static } from "ink";
-import React, { useMemo } from "react";
+import Spinner from "../vendor/ink-spinner.js";
+import { Box, Static, Text } from "ink";
+import React, { useMemo, useState, useEffect } from "react";
 
 // A batch entry can either be a standalone response item or a grouped set of
 // items (e.g. auto‑approved tool‑call batches) that should be rendered
@@ -40,16 +41,39 @@ const TerminalMessageHistory: React.FC<TerminalMessageHistoryProps> = ({
   // Flatten batch entries to response items.
   const messages = useMemo(() => batch.map(({ item }) => item!), [batch]);
 
+  function SearchingSpinner(): JSX.Element {
+    const [dots, setDots] = useState("");
+    useEffect(() => {
+      const id = setInterval(() => {
+        setDots((d) => (d.length < 3 ? d + "." : ""));
+      }, 400);
+      return () => clearInterval(id);
+    }, []);
+    return (
+      <Box gap={1} paddingLeft={2}>
+        <Spinner type="dots" />
+        <Text>
+          Searching the web{dots}
+        </Text>
+      </Box>
+    );
+  }
+
+  const extra = _loading && headerProps.webAccessEnabled ? ["spinner"] : [];
+
   return (
     <Box flexDirection="column">
       {/* The dedicated thinking indicator in the input area now displays the
           elapsed time, so we no longer render a separate counter here. */}
-      <Static items={["header", ...messages]}>
+      <Static items={["header", ...messages, ...extra]}>
         {(item, index) => {
           if (item === "header") {
             return (
               <TerminalHeader key="header" {...headerProps} workdir={workdir} />
             );
+          }
+          if (item === "spinner") {
+            return <SearchingSpinner key="spinner" />;
           }
 
           // After the guard above, item is a ResponseItem
