@@ -23,7 +23,7 @@ export function parseToolCallOutput(toolCallOutput: string): {
     // This handles cases where toolCallOutput might be a JSON string but not of the expected structure.
     if (
       typeof parsed === "object" &&
-      parsed !== null &&
+      parsed != null &&
       "output" in parsed &&
       "metadata" in parsed
     ) {

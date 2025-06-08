@@ -160,13 +160,15 @@ test("loads and saves providers correctly", () => {
   const customProviders = {
     openai: {
       name: "Custom OpenAI",
-      baseURL: "https://custom-api.openai.com/v1",
+      baseURL: "https://custom-api.openai.com",
       envKey: "CUSTOM_OPENAI_API_KEY",
+      defaultModel: "gpt-4",
     },
     anthropic: {
       name: "Anthropic",
-      baseURL: "https://api.anthropic.com",
-      envKey: "ANTHROPIC_API_KEY",
+      baseURL: "https://custom-api.anthropic.com",
+      envKey: "CUSTOM_ANTHROPIC_API_KEY",
+      defaultModel: "claude-2",
     },
   };
 
@@ -207,6 +209,7 @@ test("loads and saves providers correctly", () => {
       name: "Custom Provider",
       baseURL: "https://custom-api.example.com",
       envKey: "CUSTOM_API_KEY",
+      defaultModel: "custom-default",
     },
   };
 

@@ -7,7 +7,6 @@ import { describe, it, expect } from "vitest";
 describe("TerminalChatInput compact command", () => {
   it("shows /compact hint when context is low", async () => {
     const props: ComponentProps<typeof TerminalChatInput> = {
-      isNew: false,
       loading: false,
       submitInput: () => {},
       confirmationPrompt: null,
@@ -15,7 +14,7 @@ describe("TerminalChatInput compact command", () => {
       submitConfirmation: () => {},
       setLastResponseId: () => {},
       setItems: () => {},
-      contextLeftPercent: 10,
+      items: [],
       openOverlay: () => {},
       openDiffOverlay: () => {},
       openModelOverlay: () => {},
@@ -24,9 +23,6 @@ describe("TerminalChatInput compact command", () => {
       openHelpOverlay: () => {},
       openSessionsOverlay: () => {},
       onCompact: () => {},
-      interruptAgent: () => {},
-      active: true,
-      thinkingSeconds: 0,
     };
     const { lastFrameStripped } = renderTui(<TerminalChatInput {...props} />);
     const frame = lastFrameStripped();

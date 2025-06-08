@@ -25,14 +25,18 @@ export function createOpenAIClient(
   config: OpenAIClientConfig | AppConfig,
 ): OpenAI | AzureOpenAI {
   const headers: Record<string, string> = {};
-  if (OPENAI_ORGANIZATION) {
-    headers["OpenAI-Organization"] = OPENAI_ORGANIZATION;
-  }
-  if (OPENAI_PROJECT) {
-    headers["OpenAI-Project"] = OPENAI_PROJECT;
+  const lowerCaseProvider = config.provider?.toLowerCase();
+
+  if (lowerCaseProvider === "openai") {
+    if (OPENAI_ORGANIZATION) {
+      headers["OpenAI-Organization"] = OPENAI_ORGANIZATION;
+    }
+    if (OPENAI_PROJECT) {
+      headers["OpenAI-Project"] = OPENAI_PROJECT;
+    }
   }
 
-  if (config.provider?.toLowerCase() === "azure") {
+  if (lowerCaseProvider === "azure") {
     return new AzureOpenAI({
       apiKey: getApiKey(config.provider),
       baseURL: getBaseUrl(config.provider),
@@ -51,12 +55,15 @@ export function createOpenAIClient(
 
   if (config.provider?.toLowerCase() === "gemini") {
     // Using console.log as the main `log` utility might not be set up here or could be circular
-    console.log("[openai-client] Applying dangerouslyAllowBrowser: true for Gemini provider");
-    return new OpenAI({
+    // console.log("[openai-client] Applying dangerouslyAllowBrowser: true for Gemini provider");
+  return new OpenAI({
       ...commonOptions,
       dangerouslyAllowBrowser: true,
     });
   }
 
+  /* if (config.provider?.toLowerCase() === 'deepseek') {
+    console.log(`[openai-client.ts DEBUG] For DeepSeek, commonOptions.apiKey starts: ${commonOptions.apiKey?.substring(0,5)}, ends: ${commonOptions.apiKey?.substring(commonOptions.apiKey.length - 4)}, commonOptions.baseURL: ${commonOptions.baseURL}`);
+  } */
   return new OpenAI(commonOptions);
 }

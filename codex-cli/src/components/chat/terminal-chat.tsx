@@ -16,7 +16,7 @@ import type {
   ResponseInputItem,
   ResponseFunctionToolCall,
 } from "openai/resources/responses/responses.mjs";
-import { v4 as uuidv4 } from 'uuid';
+
 
 // Codegen utils and core logic
 
@@ -30,7 +30,8 @@ import {
   TerminalChatToolCallApplyPatch,
 } from "./terminal-chat-tool-call-command.js";
 import TerminalMessageHistory from "./terminal-message-history.js";
-import pkg from "../../../../package.json" with { type: "json" };
+import pkg from "../../../package.json";
+interface PkgInfo { version: string; }
 import { formatCommandForDisplay } from "../../format-command.js";
 import { useConfirmation } from "../../hooks/use-confirmation.js";
 import { AgentLoop } from "../../utils/agent/agent-loop.js";
@@ -56,6 +57,7 @@ import { Box, useStdout } from "ink";
 import { spawn } from "node:child_process";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { inspect } from "util";
+import { v4 as uuidv4 } from 'uuid';
 
 // Local type definitions if not imported
 export type OverlayModeType =
@@ -75,6 +77,7 @@ export type Props = {
   approvalPolicy: ApprovalPolicy;
   additionalWritableRoots: ReadonlyArray<string>;
   fullStdout: boolean;
+  onProviderChange: (newProviderName: string, selectedModel?: string) => void;
 };
 
 /**
@@ -148,15 +151,19 @@ async function generateCommandExplanation(
 }
 
 export const TerminalChat: React.FC<Props> = ({
-  config,
+  config, // This is now the stateful config from App.tsx
   initialPrompt: _initialPromptFromProps,
   imagePaths: _initialImagePathsFromProps,
   approvalPolicy,
   additionalWritableRoots,
   fullStdout,
+  onProviderChange, // Destructure the new prop
 }: Props): React.ReactElement => {
   useEffect(() => {
-  }, [approvalPolicy]);
+    // Synchronize local state with prop changes from App.tsx
+    setProvider(config.provider || "openai"); // Fallback for provider
+    setModel(config.model || "gpt-4-turbo");    // Fallback for model
+  }, [config.provider, config.model, approvalPolicy]);
 
   const notify = Boolean(config.notify);
   const [model, setModel] = useState<string>(config.model || "gpt-4-turbo");
@@ -220,7 +227,7 @@ export const TerminalChat: React.FC<Props> = ({
     }
   };
 
-  const handleSetItemsFromInput = (inputItems: ResponseInputItem[]) => {
+  const handleSetItemsFromInput = (inputItems: Array<ResponseInputItem>) => {
     const newItems = inputItems.map((item) => {
       if (item.type === "function_call") {
         const toolCallItem = item as ResponseFunctionToolCall;
@@ -303,6 +310,7 @@ export const TerminalChat: React.FC<Props> = ({
           item.content &&
           item.content.length > 0
         ) {
+          // No specific action needed for assistant message content here
         }
       },
       onLoading: setLoading,
@@ -393,6 +401,7 @@ export const TerminalChat: React.FC<Props> = ({
     requestConfirmation,
     additionalWritableRoots,
     workdir,
+    approvalPolicy,
   ]);
 
   useEffect(() => {
@@ -472,7 +481,7 @@ export const TerminalChat: React.FC<Props> = ({
 
   const headerProps: TerminalHeaderProps = {
     terminalRows: terminalRowsFromHook || 24,
-    version: (pkg as any).version,
+    version: (pkg as PkgInfo).version,
     PWD: workdir || process.cwd(),
     model: model,
     provider: provider,
@@ -493,6 +502,7 @@ export const TerminalChat: React.FC<Props> = ({
       ) {
         return;
       }
+      // eslint-disable-next-line no-console
       console.log(
         `[TerminalChat] Processing initial prompt: "${initialPromptFromProps}"`,
       );
@@ -508,16 +518,19 @@ export const TerminalChat: React.FC<Props> = ({
         // TODO: Add image handling if currentImagePaths exist
 
         if (inputs.length > 0) {
+          // eslint-disable-next-line no-console
           console.log(
             `[TerminalChat] Calling agentRef.current.run with initial inputs. Agent available: ${!!agentRef.current}`,
           );
           agentRef.current.run(inputs, lastResponseId || "");
         } else {
+          // eslint-disable-next-line no-console
           console.log(
             "[TerminalChat] No initial text prompt or images to process after trim/check.",
           );
         }
       } else {
+        // eslint-disable-next-line no-console
         console.log(
           "[TerminalChat] Agent not ready for initial prompt processing.",
         );
@@ -528,7 +541,7 @@ export const TerminalChat: React.FC<Props> = ({
       setCurrentImagePaths([]); // Use renamed setter
     };
     processInitialInput();
-  }, [agentRef.current, initialPromptFromProps, currentImagePaths]); // Use renamed state variable in dependencies
+  }, [agent, initialPromptFromProps, currentImagePaths, lastResponseId]); // Use renamed state variable in dependencies
 
   useEffect(() => {
     (async () => {
@@ -632,6 +645,7 @@ export const TerminalChat: React.FC<Props> = ({
             setLoading(false);
 
             if (!allModels?.includes(newModel)) {
+              // eslint-disable-next-line no-console
               console.error(
                 chalk.bold.red(
                   `Model "${chalk.yellow(
@@ -644,15 +658,16 @@ export const TerminalChat: React.FC<Props> = ({
               return;
             }
 
-            setModel(newModel);
+            setModel(newModel); // Local model state update for model-only changes
             setLastResponseId((prev) =>
               prev && newModel !== model ? null : prev,
             );
 
+            // For model-only changes, App.tsx is not updated via onProviderChange.
+            // The config is saved directly. Consider if App.tsx needs a handleModelChange.
             saveConfig({
               ...config,
-              model: newModel,
-              provider: provider,
+              model: newModel, // provider remains config.provider (which is from App.tsx state)
             });
 
             setItems((prev) => [
@@ -672,52 +687,20 @@ export const TerminalChat: React.FC<Props> = ({
 
             setOverlayMode("none");
           }}
-          onSelectProvider={(newProvider) => {
-            log("TerminalChat: onSelectProvider called for new provider: " + newProvider);
-            agentRef.current?.cancel(); // Cancel any ongoing agent activity
+          onSelectProvider={(newProviderName) => {
+            log("TerminalChat: onSelectProvider called for new provider: " + newProviderName);
+            agentRef.current?.cancel(); 
             setLoading(false);
+            onProviderChange(newProviderName); // Notify App.tsx
 
-            let newModelForProvider = ""; // Default to empty string (forces selection)
-
-            const providerDefaults: Record<string, string> = {
-              "openai": "o4-mini", // Default OpenAI model
-              "gemini": "gemini-pro", // A common, likely available Gemini model
-              // Potentially add other known provider defaults here
-            };
-
-            const lowerNewProvider = newProvider.toLowerCase();
-            if (providerDefaults[lowerNewProvider]) {
-              newModelForProvider = providerDefaults[lowerNewProvider];
-              log(`TerminalChat: Found default model '${newModelForProvider}' for provider '${newProvider}'`);
-            } else {
-              log(`TerminalChat: No specific default model found for provider '${newProvider}'. Model will be cleared.`);
-            }
-
-            const oldProvider = provider; // Capture old provider for comparison
-            const oldModel = model; // Capture old model for comparison
-
-            setModel(newModelForProvider); // Update the model state
-            setProvider(newProvider);     // Update the provider state
-
-            // Update and save the configuration
-            const updatedConfig = {
-              ...config,
-              provider: newProvider,
-              model: newModelForProvider,
-            };
-            saveConfig(updatedConfig);
-            log("TerminalChat: Configuration saved with new provider and model.");
-
-            // Reset lastResponseId if provider or model actually changes to ensure fresh context
+            const defaultModelForNewProvider = config.providers?.[newProviderName]?.defaultModel || "(default will be set)";
             setLastResponseId((prevLastResponseId) => {
-              if (newProvider !== oldProvider || newModelForProvider !== oldModel) {
-                log("TerminalChat: Provider or model changed, resetting lastResponseId.");
+              if (newProviderName !== provider) { 
+                log("TerminalChat: Provider changed, resetting lastResponseId.");
                 return null;
               }
               return prevLastResponseId;
             });
-
-            // Update chat items with a system message
             setItems((prevItems) => [
               ...prevItems,
               {
@@ -727,15 +710,12 @@ export const TerminalChat: React.FC<Props> = ({
                 content: [
                   {
                     type: "input_text",
-                    text: `Switched provider to ${newProvider}. ${newModelForProvider ? `Model set to '${newModelForProvider}'.` : "Please select a model."}`,
+                    text: `Switched provider to ${newProviderName}. ${defaultModelForNewProvider !== "(default will be set)" ? `Model set to '${defaultModelForNewProvider}'.` : "Please select a model."}`,
                   },
                 ],
-              } as ResponseItem, // Type assertion
+              } as ResponseItem, 
             ]);
-            log("TerminalChat: System message added for provider/model switch.");
-            // The ModelOverlay component will automatically re-fetch and display models
-            // for the `newProvider` because its `useEffect` hook depends on `currentProvider`.
-            // The `currentModel` prop of ModelOverlay will be `newModelForProvider`.
+            log("TerminalChat: System message added for provider switch.");
           }}
           onExit={() => setOverlayMode("none")}
         />
@@ -758,28 +738,47 @@ export const TerminalChat: React.FC<Props> = ({
             setLoading(false);
 
             if (!allModels?.includes(newModel)) {
+              // eslint-disable-next-line no-console
               console.error(
                 chalk.bold.red(
                   `Model "${chalk.yellow(
                     newModel,
                   )}" is not available for provider "${chalk.yellow(
-                    provider,
+                    provider, // This 'provider' is TerminalChat's local state, which should be in sync with App.tsx via props
                   )}".`,
                 ),
               );
               return;
             }
-
-            setModel(newModel);
-            setLastResponseId((prev) =>
-              prev && newModel !== model ? null : prev,
-            );
-
-            saveConfig({
-              ...config,
-              model: newModel,
-              provider: provider,
-            });
+            // When startMode is 'provider', onSelect is called AFTER onSelectProvider.
+            // The provider has already been set in App.tsx's state via onProviderChange.
+            // Now we are setting the model for that new provider.
+            // App.tsx's currentConfig needs to be updated with this new model.
+            // We should call onProviderChange again, or have a dedicated onModelChange in App.tsx.
+            // For now, to ensure App.tsx has the model, we call onProviderChange with the *current* provider (from App.tsx state)
+            // and the new model. This is a bit of a workaround.
+            // A cleaner way would be: App.tsx.handleProviderChange(newProvider, newModel)
+            // or App.tsx.handleModelChange(newModel)
+            if (config.provider) {
+              onProviderChange(config.provider); // This will re-run App.tsx's handleProviderChange
+            } else {
+              // eslint-disable-next-line no-console
+              console.error('[TerminalChat] Attempted to call onProviderChange without a valid config.provider when setting model.');
+            }
+                                            // It will use current config.provider, but update model to newModel if we pass it.
+                                            // Let's adjust App.tsx's handleProviderChange to accept an optional newModel.
+                                            // For now, this call will just re-affirm the provider and its default model.
+                                            // The user selected 'newModel', so we need to ensure THAT is set.
+            
+            // Notify App.tsx to update its state with the new model for the current provider.
+            // App.tsx's handleProviderChange will set this model.
+            // The local 'model' state in TerminalChat will be updated via the useEffect hook listening to props.config changes.
+            if (config.provider) {
+              onProviderChange(config.provider, newModel);
+            } else {
+              // eslint-disable-next-line no-console
+              console.error('[TerminalChat] Attempted to call onProviderChange with newModel but without a valid config.provider.');
+            }
 
             setItems((prev) => [
               ...prev,
@@ -790,7 +789,7 @@ export const TerminalChat: React.FC<Props> = ({
                 content: [
                   {
                     type: "input_text",
-                    text: `Switched model to ${newModel}`,
+                    text: `Switched model to ${newModel} for provider ${config.provider}`,
                   },
                 ],
               },
@@ -798,52 +797,20 @@ export const TerminalChat: React.FC<Props> = ({
 
             setOverlayMode("none");
           }}
-          onSelectProvider={(newProvider) => {
-            log("TerminalChat: onSelectProvider called for new provider: " + newProvider);
-            agentRef.current?.cancel(); // Cancel any ongoing agent activity
+          onSelectProvider={(newProviderName) => {
+            log("TerminalChat: onSelectProvider called for new provider: " + newProviderName);
+            agentRef.current?.cancel(); 
             setLoading(false);
+            onProviderChange(newProviderName); // Notify App.tsx
 
-            let newModelForProvider = ""; // Default to empty string (forces selection)
-
-            const providerDefaults: Record<string, string> = {
-              "openai": "o4-mini", // Default OpenAI model
-              "gemini": "gemini-pro", // A common, likely available Gemini model
-              // Potentially add other known provider defaults here
-            };
-
-            const lowerNewProvider = newProvider.toLowerCase();
-            if (providerDefaults[lowerNewProvider]) {
-              newModelForProvider = providerDefaults[lowerNewProvider];
-              log(`TerminalChat: Found default model '${newModelForProvider}' for provider '${newProvider}'`);
-            } else {
-              log(`TerminalChat: No specific default model found for provider '${newProvider}'. Model will be cleared.`);
-            }
-
-            const oldProvider = provider; // Capture old provider for comparison
-            const oldModel = model; // Capture old model for comparison
-
-            setModel(newModelForProvider); // Update the model state
-            setProvider(newProvider);     // Update the provider state
-
-            // Update and save the configuration
-            const updatedConfig = {
-              ...config,
-              provider: newProvider,
-              model: newModelForProvider,
-            };
-            saveConfig(updatedConfig);
-            log("TerminalChat: Configuration saved with new provider and model.");
-
-            // Reset lastResponseId if provider or model actually changes to ensure fresh context
+            const defaultModelForNewProvider = config.providers?.[newProviderName]?.defaultModel || "(default will be set)";
             setLastResponseId((prevLastResponseId) => {
-              if (newProvider !== oldProvider || newModelForProvider !== oldModel) {
-                log("TerminalChat: Provider or model changed, resetting lastResponseId.");
+              if (newProviderName !== provider) { 
+                log("TerminalChat: Provider changed, resetting lastResponseId.");
                 return null;
               }
               return prevLastResponseId;
             });
-
-            // Update chat items with a system message
             setItems((prevItems) => [
               ...prevItems,
               {
@@ -853,15 +820,12 @@ export const TerminalChat: React.FC<Props> = ({
                 content: [
                   {
                     type: "input_text",
-                    text: `Switched provider to ${newProvider}. ${newModelForProvider ? `Model set to '${newModelForProvider}'.` : "Please select a model."}`,
+                    text: `Switched provider to ${newProviderName}. ${defaultModelForNewProvider !== "(default will be set)" ? `Model set to '${defaultModelForNewProvider}'.` : "Please select a model."}`,
                   },
                 ],
-              } as ResponseItem, // Type assertion
+              } as ResponseItem, 
             ]);
-            log("TerminalChat: System message added for provider/model switch.");
-            // The ModelOverlay component will automatically re-fetch and display models
-            // for the `newProvider` because its `useEffect` hook depends on `currentProvider`.
-            // The `currentModel` prop of ModelOverlay will be `newModelForProvider`.
+            log("TerminalChat: System message added for provider switch.");
           }}
           onExit={() => setOverlayMode("none")}
         />

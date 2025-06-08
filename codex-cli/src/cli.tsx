@@ -1,5 +1,75 @@
 #!/usr/bin/env node
-import "dotenv/config";
+
+
+
+
+// Type Imports
+import type { AppRollout } from './app';
+import type {
+  ApprovalPolicy,
+  ApplyPatchCommand,
+  SafetyAssessment,
+} from './approvals';
+import type { CommandConfirmation } from './utils/agent/agent-loop'; // Anchor for subsequent types
+import type { AppConfig } from './utils/config'; // After agent-loop type
+import type {
+  ResponseItem as OpenAiSdkResponseItem,
+  ResponseFunctionToolCall,
+} from 'openai/resources/responses/responses.mjs'; // After agent-loop type
+import type { ReasoningEffort } from 'openai/resources.mjs'; // After agent-loop type
+
+// Value Imports
+import App from './app';
+import { runSinglePass } from './cli-singlepass';
+import SessionsOverlay from './components/sessions-overlay.js';
+// Utilities
+import { AgentLoop } from './utils/agent/agent-loop';
+import { ReviewDecision } from './utils/agent/review';
+import { AutoApprovalMode } from './utils/auto-approval-mode';
+import { checkForUpdates } from './utils/check-updates';
+import {
+  loadConfig,
+  PRETTY_PRINT,
+  INSTRUCTIONS_FILEPATH,
+  getApiKey,
+  saveConfig,
+} from './utils/config';
+import {
+  getApiKey as fetchApiKey,
+  maybeRedeemCredits,
+} from './utils/get-api-key';
+import { createInputItem } from './utils/input-utils';
+import { initLogger } from './utils/logger/log';
+import { isModelSupportedForResponses } from './utils/model-utils.js'; // Before parsers
+import { parseToolCall } from './utils/parsers'; // After model-utils
+import { onExit, setInkRenderer } from './utils/terminal';
+import chalk from 'chalk';
+import { spawnSync } from 'child_process';
+import dotenv from 'dotenv';
+import fs from 'fs';
+import { render } from 'ink';
+import meow from 'meow';
+import os from 'os';
+import path from 'path';
+import React from 'react';
+import * as url from 'url';
+
+// ES Module equivalents for __filename and __dirname
+const __filename = url.fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Configure dotenv to load .env from the project root
+const envPath = path.resolve(__dirname, "../../.env");
+// console.log(`[CLI DEBUG] Attempting to load .env from: ${envPath}`);
+const dotenvResult = dotenv.config({ path: envPath, debug: false });
+
+if (dotenvResult.error) {
+  // console.error('[CLI DEBUG] dotenv.config error:', dotenvResult.error);
+} else {
+  // console.log('[CLI DEBUG] dotenv.config loaded variables:', dotenvResult.parsed);
+}
+// console.log(`[CLI DEBUG] process.env['OPENAI_API_KEY'] after dotenv: ${process.env['OPENAI_API_KEY'] ? 'SET (' + process.env['OPENAI_API_KEY']!.substring(0,5) + '...)' : 'NOT SET'}`);
+// console.log(`[CLI DEBUG] process.env['DEEPSEEK_API_KEY'] after dotenv: ${process.env['DEEPSEEK_API_KEY'] ? 'SET (' + process.env['DEEPSEEK_API_KEY']!.substring(0,5) + '...)' : 'NOT SET'}`);
 
 // Exit early if on an older version of Node.js (< 22)
 const major = process.versions.node.split(".").map(Number)[0]!;
@@ -18,46 +88,9 @@ if (major < 22) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (process as any).noDeprecation = true;
 
-import type { AppRollout } from "./app";
-import type {
-  ApprovalPolicy,
-  ApplyPatchCommand,
-  SafetyAssessment,
-} from "./approvals";
-import type { CommandConfirmation } from "./utils/agent/agent-loop";
-import type { AppConfig } from "./utils/config";
-import type { ResponseItem as OpenAiSdkResponseItem, ResponseFunctionToolCall } from "openai/resources/responses/responses.mjs";
-import type { ReasoningEffort } from "openai/resources.mjs";
 
-import App from "./app";
-import { runSinglePass } from "./cli-singlepass";
-import SessionsOverlay from "./components/sessions-overlay.js";
-import { AgentLoop } from "./utils/agent/agent-loop";
-import { ReviewDecision } from "./utils/agent/review";
-import { AutoApprovalMode } from "./utils/auto-approval-mode";
-import { checkForUpdates } from "./utils/check-updates";
-import {
-  loadConfig,
-  PRETTY_PRINT,
-  INSTRUCTIONS_FILEPATH,
-} from "./utils/config";
-import {
-  getApiKey as fetchApiKey,
-  maybeRedeemCredits,
-} from "./utils/get-api-key";
-import { createInputItem } from "./utils/input-utils";
-import { initLogger } from "./utils/logger/log";
-import { isModelSupportedForResponses } from "./utils/model-utils.js";
-import { parseToolCall } from "./utils/parsers";
-import { onExit, setInkRenderer } from "./utils/terminal";
-import chalk from "chalk";
-import { spawnSync } from "child_process";
-import fs from "fs";
-import { render } from "ink";
-import meow from "meow";
-import os from "os";
-import path from "path";
-import React from "react";
+
+
 
 // Call this early so `tail -F "$TMPDIR/oai-codex/codex-cli-latest.log"` works
 // immediately. This must be run with DEBUG=1 for logging to work.
@@ -293,16 +326,31 @@ let config = loadConfig(undefined, undefined, {
 // via the `--history` flag. Therefore it must be declared with `let` rather
 // than `const`.
 let prompt = cli.input[0];
-const model = cli.flags.model ?? config.model;
 const imagePaths = cli.flags.image;
-const provider = cli.flags.provider ?? config.provider ?? "openai";
 
-const client = {
+// Determine effective provider for the session
+const sessionEffectiveProvider = cli.flags.provider ?? "openai";
+config.provider = sessionEffectiveProvider; // Update in-memory config with the session's provider
+
+// Determine effective model for the session
+if (cli.flags.model) {
+  config.model = cli.flags.model; // User specified model via flag
+} else {
+  // No model flag, use default for the session's provider
+  config.model = config.providers?.[sessionEffectiveProvider]?.defaultModel ?? config.model; // Fallback to existing config.model if lookup fails
+}
+
+// 'provider' variable to be used for API key logic etc.
+const provider = sessionEffectiveProvider;
+
+const client = { // OpenAI specific client details for login flow
   issuer: "https://auth.openai.com",
   client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
 };
 
-let apiKey = "";
+// Initialize currentProviderApiKey by checking config.ts#getApiKey first.
+// This checks persisted config (providerApiKeys) and then environment variables.
+let currentProviderApiKey: string | undefined = getApiKey(provider);
 let savedTokens:
   | {
       id_token?: string;
@@ -311,51 +359,78 @@ let savedTokens:
     }
   | undefined;
 
-// Try to load existing auth file if present
-try {
-  const home = os.homedir();
-  const authDir = path.join(home, ".codex");
-  const authFile = path.join(authDir, "auth.json");
-  if (fs.existsSync(authFile)) {
-    const data = JSON.parse(fs.readFileSync(authFile, "utf-8"));
-    savedTokens = data.tokens;
-    const lastRefreshTime = data.last_refresh
-      ? new Date(data.last_refresh).getTime()
-      : 0;
-    const expired = Date.now() - lastRefreshTime > 28 * 24 * 60 * 60 * 1000;
-    if (data.OPENAI_API_KEY && !expired) {
-      apiKey = data.OPENAI_API_KEY;
-    }
-  }
-} catch {
-  // ignore errors
-}
-
-if (cli.flags.login) {
-  apiKey = await fetchApiKey(client.issuer, client.client_id);
+// Try to load existing OpenAI auth file if present (for OpenAI provider only)
+if (provider.toLowerCase() === 'openai') {
   try {
     const home = os.homedir();
     const authDir = path.join(home, ".codex");
     const authFile = path.join(authDir, "auth.json");
     if (fs.existsSync(authFile)) {
       const data = JSON.parse(fs.readFileSync(authFile, "utf-8"));
-      savedTokens = data.tokens;
+      savedTokens = data.tokens; // Used for OpenAI login flow/refresh
+      const lastRefreshTime = data.last_refresh
+        ? new Date(data.last_refresh).getTime()
+        : 0;
+      const expired = Date.now() - lastRefreshTime > 28 * 24 * 60 * 60 * 1000;
+      if (data.OPENAI_API_KEY && !expired) {
+        currentProviderApiKey = data.OPENAI_API_KEY;
+      }
     }
   } catch {
-    /* ignore */
+    // ignore errors
   }
-} else if (!apiKey) {
-  apiKey = await fetchApiKey(client.issuer, client.client_id);
 }
-// Ensure the API key is available as an environment variable for legacy code
-process.env["OPENAI_API_KEY"] = apiKey;
 
-if (cli.flags.free) {
+// If --login flag is present, or if no API key was loaded from OpenAI's auth.json (for OpenAI)
+// or if it's a different provider (currentProviderApiKey would be undefined),
+// attempt to fetch/prompt for an API key.
+if (cli.flags.login || !currentProviderApiKey) {
+  const forceLogin = cli.flags.login; // True if --login, false otherwise
+  // Pass the determined 'provider' to fetchApiKey (get-api-key.tsx#getApiKey)
+  const promptedKey = await fetchApiKey(client.issuer, client.client_id, forceLogin, provider);
+
+  if (promptedKey) {
+    currentProviderApiKey = promptedKey;
+    const providerInfo = config.providers?.[provider.toLowerCase()];
+    const currentProviderEnvKey = providerInfo?.envKey ?? `${provider.toUpperCase()}_API_KEY`;
+    
+    process.env[currentProviderEnvKey] = currentProviderApiKey;
+
+    if (!config.providerApiKeys) {
+      config.providerApiKeys = {};
+    }
+    config.providerApiKeys[provider.toLowerCase()] = currentProviderApiKey;
+    // Note: saveConfig(config) will be called later, after all config updates.
+
+    // If the provider was OpenAI, also set the generic OPENAI_API_KEY in env for broad compatibility.
+    if (provider.toLowerCase() === 'openai') {
+      process.env["OPENAI_API_KEY"] = currentProviderApiKey;
+    }
+  }
+}
+
+// The following block is now redundant as currentProviderApiKey is initialized
+// from getApiKey(provider) and updated if a key is prompted.
+// If it's still undefined after a prompt escape, that's the final state.
+/*
+if (!currentProviderApiKey) {
+  currentProviderApiKey = getApiKey(provider); // This is config.ts#getApiKey
+}
+*/
+
+// Handle --free flag (OpenAI specific)
+if (cli.flags.free && provider.toLowerCase() === 'openai') {
   // eslint-disable-next-line no-console
   console.log(`${chalk.bold("codex --free")} attempting to redeem credits...`);
   if (!savedTokens?.refresh_token) {
-    apiKey = await fetchApiKey(client.issuer, client.client_id, true);
-    // fetchApiKey includes credit redemption as the end of the flow
+    // Force login flow which includes redemption, and pass 'openai' as provider
+    const openAIKeyFromFreeFlow = await fetchApiKey(client.issuer, client.client_id, true, 'openai');
+    if (openAIKeyFromFreeFlow) {
+      currentProviderApiKey = openAIKeyFromFreeFlow; // Update currentProviderApiKey if it's for openai
+      process.env["OPENAI_API_KEY"] = currentProviderApiKey;
+      if (!config.providerApiKeys) {config.providerApiKeys = {};}
+      config.providerApiKeys['openai'] = currentProviderApiKey;
+    }
   } else {
     await maybeRedeemCredits(
       client.issuer,
@@ -369,21 +444,18 @@ if (cli.flags.free) {
 // Set of providers that don't require API keys
 const NO_API_KEY_REQUIRED = new Set(["ollama"]);
 
-// Skip API key validation for providers that don't require an API key
-if (!apiKey && !NO_API_KEY_REQUIRED.has(provider.toLowerCase())) {
+// Final API key validation using the definitive getApiKey from config.ts
+const finalEffectiveApiKey = getApiKey(provider);
+
+if (!finalEffectiveApiKey && !NO_API_KEY_REQUIRED.has(provider.toLowerCase())) {
   const apiKeyName =
-    provider.toLowerCase() === "gemini"
-      ? "GEMINI_API_KEY"
-      : `${provider.toUpperCase()}_API_KEY`;
+    (config.providers?.[provider.toLowerCase()]?.envKey) ?? `${provider.toUpperCase()}_API_KEY`;
   // eslint-disable-next-line no-console
   console.error(
     `\n${chalk.red(`Missing ${provider} API key.`)}\n\n` +
-      `Set the environment variable ${chalk.bold(apiKeyName)} ` +
-      `and re-run this command.\n` +
-      `You can create a ${chalk.bold(apiKeyName)} ` +
-      `in the ${chalk.bold(
-        `${provider} dashboard or console`,
-      )} (e.g., Google AI Studio for Gemini).\n`,
+      `Set the environment variable ${chalk.bold(apiKeyName)}, or run with --login, ` +
+      `or ensure the key is in ~/.codex/config.json under providerApiKeys.${provider.toLowerCase()}\n` +
+      `and re-run this command.\n`
   );
   process.exit(1);
 }
@@ -394,17 +466,21 @@ const disableResponseStorage = flagPresent
   ? Boolean(cli.flags.disableResponseStorage) // value user actually passed
   : (config.disableResponseStorage ?? false); // fall back to YAML, default to false
 
+// Update the main config object for runtime use
 config = {
-  apiKey,
-  ...config,
-  model: model ?? config.model,
+  ...config, // Spread existing config first to preserve providerApiKeys etc.
+  apiKey: finalEffectiveApiKey, // The definitive key for the current provider
+  model: config.model, // config.model is already correctly set by this point
   notify: Boolean(cli.flags.notify),
   reasoningEffort:
     (cli.flags.reasoning as ReasoningEffort | undefined) ?? "medium",
   flexMode: cli.flags.flexMode || (config.flexMode ?? false),
-  provider,
+  provider, // The determined provider
   disableResponseStorage,
 };
+
+// Save any configuration changes made (like new API keys)
+  saveConfig(config);
 
 // Check for updates after loading config. This is important because we write state file in
 // the config dir.
