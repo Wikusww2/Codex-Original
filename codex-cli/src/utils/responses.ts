@@ -291,11 +291,13 @@ const createCompletion = (
   // ); // Log model for brevity
   const fullMessages = getFullMessages(input);
   const chatTools = convertTools(input.tools);
-  const webSearchOptions = input.tools?.some(
-    (tool) => tool.type === "function" && tool.name === "web_search",
-  )
-    ? {}
-    : undefined;
+  const webSearchOptions =
+    sessionConfig?.webAccess &&
+    input.tools?.some(
+      (tool) => tool.type === "function" && tool.name === "web_search",
+    )
+      ? {}
+      : undefined;
 
   const chatInput: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
     model: input.model,
