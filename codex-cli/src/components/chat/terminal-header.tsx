@@ -15,6 +15,7 @@ export interface TerminalHeaderProps {
   agent?: AgentLoop;
   initialImagePaths?: Array<string>;
   flexModeEnabled?: boolean;
+  webAccessEnabled?: boolean;
   workdir?: string;
 }
 
@@ -29,6 +30,7 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
   agent,
   initialImagePaths,
   flexModeEnabled = false,
+  webAccessEnabled = false,
   workdir,
 }) => {
   return (
@@ -39,6 +41,8 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
           ● Codex v{version} - {PWD} - {model} ({provider}) -{" "}
           <Text color={colorsByPolicy[approvalPolicy]}>{approvalPolicy}</Text>
           {flexModeEnabled ? " - flex-mode" : ""}
+          {" - web_access:"}
+          {webAccessEnabled ? "enabled" : "disabled"}
         </Text>
       ) : (
         <>
@@ -79,6 +83,10 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
               <Text bold color={colorsByPolicy[approvalPolicy]}>
                 {approvalPolicy}
               </Text>
+            </Text>
+            <Text dimColor>
+              <Text color="blueBright">↳</Text> web_access:{" "}
+              <Text bold>{webAccessEnabled ? "enabled" : "disabled"}</Text>
             </Text>
             {flexModeEnabled && (
               <Text dimColor>
