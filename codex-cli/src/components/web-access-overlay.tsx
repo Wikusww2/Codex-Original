@@ -1,3 +1,5 @@
+// @ts-expect-error select.js is JavaScript and has no types
+import { Select } from "./vendor/ink-select/select";
 import { Box, Text, useInput } from "ink";
 import React from "react";
 
@@ -10,12 +12,8 @@ export default function WebAccessOverlay({
   onToggle: (value: boolean) => void;
   onExit: () => void;
 }): JSX.Element {
-  useInput((input, key) => {
-    if (input === "y") {
-      onToggle(true);
-      onExit();
-    } else if (input === "n" || key.escape) {
-      onToggle(false);
+  useInput((_input, key) => {
+    if (key.escape) {
       onExit();
     }
   });
@@ -27,7 +25,18 @@ export default function WebAccessOverlay({
       </Box>
       <Box flexDirection="column" paddingX={1}>
         <Text>Currently {enabled ? "enabled" : "disabled"}.</Text>
-        <Text>Enable web access? (y/n)</Text>
+        <Select
+          defaultValue={enabled}
+          onChange={(val: boolean) => {
+            onToggle(val);
+            onExit();
+          }}
+          options={[
+            { label: "Enable", value: true },
+            { label: "Disable", value: false },
+          ]}
+        />
+        <Text dimColor>use arrows and enter · esc to cancel</Text>
       </Box>
     </Box>
   );
