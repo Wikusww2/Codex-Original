@@ -40,6 +40,7 @@ class AsyncLogger implements Logger {
     try {
       await fs.appendFile(this.filePath, messages);
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error(
         "[AsyncLogger.maybeWrite] Error writing to log file:",
         error,

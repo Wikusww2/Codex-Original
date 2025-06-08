@@ -45,7 +45,7 @@ export const SLASH_COMMANDS: Array<SlashCommand> = [
         >;
         models?: Array<string>;
       },
-    ) => {
+    ): Array<string> => {
       const availableModels = context?.models || [];
       if (currentArgInput === "") {
         return availableModels; // Show all available models if no argument typed
@@ -78,7 +78,7 @@ export const SLASH_COMMANDS: Array<SlashCommand> = [
         >;
         models?: Array<string>;
       },
-    ) => {
+    ): Array<string> => {
       const providerKeys = context?.providers
         ? Object.keys(context.providers)
         : [];

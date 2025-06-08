@@ -16,6 +16,28 @@ import type {
 } from "openai/resources/responses/responses.mjs";
 import type { Reasoning } from "openai/resources.mjs";
 
+// Custom type extensions for local shell operations
+interface LocalShellTool {
+  type: 'local_shell'; // This makes it a distinct type, compatible where a 'type' property is checked.
+}
+
+interface LocalShellCallItem {
+  type: 'local_shell_call';
+  id: string;
+  // If 'role' is a possible property for user messages that might be part of this union:
+  // role?: 'user' | string; // Making role optional and more flexible if needed
+}
+
+// Union type for items that can be processed in certain contexts.
+// Includes ResponseInputItem for compatibility with existing OpenAI types.
+// Also includes a more generic Message shape if 'role' needs to be checked on non-OpenAI items.
+interface BasicMessage {
+  type: 'message';
+  role: 'user' | 'assistant' | 'system' | 'function' | 'tool'; // Align with typical message roles
+  // content: any; // Add content if necessary for type checking
+}
+type ExtendedResponseInputItem = ResponseInputItem | LocalShellCallItem | BasicMessage;
+
 import { CLI_VERSION } from "../../version.js";
 import {
   OPENAI_TIMEOUT_MS,
@@ -116,9 +138,8 @@ const shellFunctionTool: FunctionTool = {
   },
 };
 
-const localShellTool: Tool = {
-  // The type property expects specific string literals from Tool type
-  type: "local_shell" as any,
+const localShellTool: LocalShellTool = {
+  type: "local_shell",
 };
 
 export class AgentLoop {
@@ -739,11 +760,11 @@ export class AgentLoop {
                 //     building the first turnInput; stageItem would add a
                 //     duplicate.
                 if (
-                  (item as ResponseInputItem).type === "function_call" ||
-                  (item as ResponseInputItem).type === "reasoning" ||
-                  (item as any).type === "local_shell_call" ||
-                  ((item as ResponseInputItem).type === "message" &&
-                    (item as any).role === "user")
+                  (item as ExtendedResponseInputItem).type === "function_call" ||
+                  (item as ExtendedResponseInputItem).type === "reasoning" ||
+                  (item as ExtendedResponseInputItem).type === "local_shell_call" ||
+                  ((item as ExtendedResponseInputItem).type === "message" &&
+                    (item as BasicMessage).role === "user")
                 ) {
                   return;
                 }
@@ -761,7 +782,7 @@ export class AgentLoop {
               }
             }
           }
-        }, 3); // Small 3ms delay for readable streaming.
+        }, 0); // Reduced delay for potentially faster streaming.
       };
 
       while (turnInput.length > 0) {
@@ -812,6 +833,7 @@ export class AgentLoop {
               .filter(Boolean)
               .join("\n");
 
+            // console.log(`[agent-loop.ts DEBUG CONSOLE] Current this.config.provider: ${this.config.provider}`);
             const responseCall =
               !this.config.provider ||
               this.config.provider?.toLowerCase() === "openai"
@@ -821,6 +843,7 @@ export class AgentLoop {
                     responsesCreateViaChatCompletions(
                       this.oai,
                       params as ResponseCreateParams & { stream: true },
+                      this.config,
                     );
             log(
               `instructions (length ${mergedInstructions.length}): ${mergedInstructions}`,
@@ -1219,6 +1242,7 @@ export class AgentLoop {
                       responsesCreateViaChatCompletions(
                         this.oai,
                         params as ResponseCreateParams & { stream: true },
+                        this.config,
                       );
 
               log(
@@ -1629,7 +1653,7 @@ export class AgentLoop {
         }
       } else if (item.type === "local_shell_call") {
         // Skip already processed shell calls
-        const shellId = (item as any).id;
+        const shellId = (item as LocalShellCallItem).id;
         if (shellId && alreadyProcessedResponses.has(shellId)) {
           continue;
         }

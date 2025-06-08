@@ -1,3 +1,4 @@
+import type { AppConfig } from "./config.js";
 import type { OpenAI } from "openai";
 import type {
   ResponseCreateParams,
@@ -219,9 +220,9 @@ function convertInputItemToMessage(
 function getFullMessages(
   input: ResponseCreateInput,
 ): Array<OpenAI.Chat.Completions.ChatCompletionMessageParam> {
-  console.log(
-    `[responses.ts] getFullMessages input.input: ${JSON.stringify(input.input, null, 2)}`,
-  );
+  // console.log(
+  //   `[responses.ts] getFullMessages input.input: ${JSON.stringify(input.input, null, 2)}`,
+  // );
 
   let baseHistory: Array<OpenAI.Chat.Completions.ChatCompletionMessageParam> =
     [];
@@ -267,17 +268,26 @@ function convertTools(
         name: tool.name,
         description: tool.description || undefined,
         parameters:
-          tool.parameters === null || tool.parameters === undefined
+          tool.parameters == null
             ? undefined
             : (tool.parameters as OpenAI.FunctionParameters),
       },
     }));
 }
 
-const createCompletion = (openai: OpenAI, input: ResponseCreateInput) => {
-  console.log(
-    `[responses.ts] createCompletion called with input: ${JSON.stringify(input.model, null, 2)}`,
-  ); // Log model for brevity
+const createCompletion = (
+  openai: OpenAI,
+  input: ResponseCreateInput,
+  sessionConfig: AppConfig,
+) => {
+  // console.log(`[responses.ts DEBUG] createCompletion received sessionConfig.provider: ${sessionConfig.provider},  toLowerCase: ${sessionConfig.provider?.toLowerCase()}`);
+  // console.log(
+  //   `[responses.ts] createCompletion called with input: ${JSON.stringify(
+  //     input.model,
+  //     null,
+  //     2,
+  //   )}`,
+  // ); // Log model for brevity
   const fullMessages = getFullMessages(input);
   const chatTools = convertTools(input.tools);
   const webSearchOptions = input.tools?.some(
@@ -301,30 +311,42 @@ const createCompletion = (openai: OpenAI, input: ResponseCreateInput) => {
     metadata: input.metadata,
   };
 
-  console.log(
-    "[responses.ts] About to call openai.chat.completions.create. Current function source:",
-    openai.chat.completions.create.toString(),
-  );
-  return openai.chat.completions.create(chatInput);
+  // console.log(
+  //   "[responses.ts] About to call openai.chat.completions.create. Current function source:",
+  //   openai.chat.completions.create.toString(),
+  // );
+  const currentProvider = sessionConfig.provider?.toLowerCase();
+
+  if (currentProvider === "deepseek") {
+    const requestOptions: OpenAI.RequestOptions = { path: "/chat/completions" };
+    // console.log(`[responses.ts DEBUG] Using custom path for DeepSeek: ${requestOptions.path}`);
+    return openai.chat.completions.create(chatInput, requestOptions);
+  } else {
+    return openai.chat.completions.create(chatInput);
+  }
 };
 
 // Main function with overloading
 async function responsesCreateViaChatCompletions(
   openai: OpenAI,
   input: ResponseCreateInput & { stream: true },
+  sessionConfig: AppConfig,
 ): Promise<AsyncGenerator<ResponseEvent>>;
 async function responsesCreateViaChatCompletions(
   openai: OpenAI,
   input: ResponseCreateInput & { stream?: false },
+  sessionConfig: AppConfig,
 ): Promise<ResponseOutput>;
 async function responsesCreateViaChatCompletions(
   openai: OpenAI,
   input: ResponseCreateInput,
+  sessionConfig: AppConfig,
 ): Promise<ResponseOutput | AsyncGenerator<ResponseEvent>> {
-  console.log(
-    `[responses.ts] responsesCreateViaChatCompletions called with model: ${JSON.stringify(input.model, null, 2)}`,
-  ); // Log model for brevity
-  const completion = await createCompletion(openai, input);
+  // console.log(`[responses.ts DEBUG] responsesCreateViaChatCompletions received sessionConfig.provider: ${sessionConfig.provider}`);
+  // console.log(
+  //   `[responses.ts] responsesCreateViaChatCompletions called with model: ${JSON.stringify(input.model, null, 2)}`,
+  // ); // Log model for brevity
+  const completion = await createCompletion(openai, input, sessionConfig);
   if (input.stream) {
     return streamResponses(
       input,

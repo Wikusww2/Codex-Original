@@ -3,9 +3,12 @@ import type { AppConfig } from "./utils/config";
 import type { TerminalChatSession } from "./utils/session.js";
 import type { ResponseItem } from "openai/resources/responses/responses";
 
+
 import { TerminalChat } from "./components/chat/terminal-chat";
 import TerminalChatPastRollout from "./components/chat/terminal-chat-past-rollout";
 import { checkInGit } from "./utils/check-in-git";
+import { getApiKey } from "./utils/config";
+import { log } from "./utils/logger/log";
 import { onExit } from "./utils/terminal";
 import { CLI_VERSION } from "./version";
 import { ConfirmInput } from "@inkjs/ui";
@@ -29,7 +32,7 @@ type Props = {
 
 export default function App({
   prompt,
-  config,
+  config: initialConfig, // Renamed prop for clarity
   rollout,
   imagePaths,
   approvalPolicy,
@@ -38,6 +41,22 @@ export default function App({
 }: Props): JSX.Element {
   const app = useApp();
   const [accepted, setAccepted] = useState(() => false);
+  const [currentConfig, setCurrentConfig] = useState<AppConfig>(initialConfig);
+
+  const handleProviderChange = (newProviderName: string, selectedModel?: string) => {
+    log(`App: handleProviderChange called with Provider: ${newProviderName}, Selected Model: ${selectedModel}`);
+    setCurrentConfig(prevConfig => {
+      const newModel = selectedModel || prevConfig.providers?.[newProviderName]?.defaultModel || '';
+      // getApiKey will look into prevConfig.providerApiKeys or env vars for the newProviderName's key
+      const newApiKey = getApiKey(newProviderName);
+      return {
+        ...prevConfig,
+        provider: newProviderName,
+        model: newModel,
+        apiKey: newApiKey,
+      };
+    });
+  };
   const [cwd, inGitRepo] = useMemo(() => {
     const currentCwd = process.cwd();
     const gitRepoStatus = checkInGit(currentCwd);
@@ -51,7 +70,7 @@ export default function App({
       <TerminalChatPastRollout
         session={rollout.session}
         items={rollout.items}
-        fileOpener={config.fileOpener}
+        fileOpener={currentConfig.fileOpener}
       />
     );
   }
@@ -98,12 +117,13 @@ export default function App({
 
   return (
     <TerminalChat
-      config={config}
+      config={currentConfig} // Pass the stateful config
       initialPrompt={prompt}
       imagePaths={imagePaths}
       approvalPolicy={approvalPolicy}
       additionalWritableRoots={additionalWritableRoots}
       fullStdout={fullStdout}
+      onProviderChange={handleProviderChange} // Pass the handler
     />
   );
 }

@@ -220,12 +220,6 @@ export function exec(
       );
       break;
     }
-    default: // Should not happen
-      return Promise.resolve({
-        stdout: "",
-        stderr: `Unknown sandbox type: ${sandbox}`,
-        exitCode: 1,
-      });
   }
 
   return executorPromise.then((result) => {

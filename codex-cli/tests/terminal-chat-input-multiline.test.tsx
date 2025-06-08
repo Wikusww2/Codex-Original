@@ -28,7 +28,7 @@ describe("TerminalChatInput multiline functionality", () => {
     const submitInput = vi.fn();
 
     const props: ComponentProps<typeof TerminalChatInput> = {
-      isNew: false,
+
       loading: false,
       submitInput,
       confirmationPrompt: null,
@@ -36,7 +36,7 @@ describe("TerminalChatInput multiline functionality", () => {
       submitConfirmation: () => {},
       setLastResponseId: () => {},
       setItems: () => {},
-      contextLeftPercent: 50,
+      items: [],
       openOverlay: () => {},
       openDiffOverlay: () => {},
       openModelOverlay: () => {},
@@ -45,9 +45,6 @@ describe("TerminalChatInput multiline functionality", () => {
       openHelpOverlay: () => {},
       openSessionsOverlay: () => {},
       onCompact: () => {},
-      interruptAgent: () => {},
-      active: true,
-      thinkingSeconds: 0,
     };
 
     const { stdin, lastFrameStripped, flush, cleanup } = renderTui(
@@ -81,7 +78,7 @@ describe("TerminalChatInput multiline functionality", () => {
     const submitInput = vi.fn();
 
     const props: ComponentProps<typeof TerminalChatInput> = {
-      isNew: false,
+
       loading: false,
       submitInput,
       confirmationPrompt: null,
@@ -89,7 +86,7 @@ describe("TerminalChatInput multiline functionality", () => {
       submitConfirmation: () => {},
       setLastResponseId: () => {},
       setItems: () => {},
-      contextLeftPercent: 50,
+      items: [],
       openOverlay: () => {},
       openDiffOverlay: () => {},
       openModelOverlay: () => {},
@@ -98,9 +95,6 @@ describe("TerminalChatInput multiline functionality", () => {
       openHelpOverlay: () => {},
       openSessionsOverlay: () => {},
       onCompact: () => {},
-      interruptAgent: () => {},
-      active: true,
-      thinkingSeconds: 0,
     };
 
     const { stdin, lastFrameStripped, flush, cleanup } = renderTui(

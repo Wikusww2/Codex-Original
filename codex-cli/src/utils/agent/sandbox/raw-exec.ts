@@ -54,7 +54,8 @@ export function exec(
 
         // For logging purposes only
         if (process.platform === "win32") {
-
+          // TODO: Implement special handling for Windows if necessary in the future for tree-kill
+          // No specific action needed for Windows in tree-kill at this moment.
         }
       }
     }

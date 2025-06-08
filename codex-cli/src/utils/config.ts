@@ -1,3 +1,4 @@
+// console.log('[config.ts DEBUG] MODULE LOADED AT START');
 // NOTE: We intentionally point the TypeScript import at the source file
 // (`./auto-approval-mode.ts`) instead of the emitted `.js` bundle.  This makes
 // the module resolvable when the project is executed via `ts-node`, which
@@ -109,48 +110,85 @@ export function getBaseUrl(provider: string = "openai"): string | undefined {
 }
 
 export function getApiKey(provider: string = "openai"): string | undefined {
-  const config = loadConfig();
-  const providersConfig = config.providers ?? providers;
+  const config = loadConfig(); // Load config to access providerApiKeys
   const lowerProvider = provider.toLowerCase();
+
+  // Path 0: Check persisted provider-specific API key
+  if (config.providerApiKeys && config.providerApiKeys[lowerProvider]) {
+    /* if (lowerProvider === 'deepseek') {
+      console.log(`[config.ts DEBUG getApiKey] Path 0: Trying key from persisted config.providerApiKeys['${lowerProvider}']. Key found: ${!!config.providerApiKeys[lowerProvider]}, Starts: ${config.providerApiKeys[lowerProvider]?.substring(0,5)}, Ends: ${config.providerApiKeys[lowerProvider]?.substring(config.providerApiKeys[lowerProvider].length - 4)}`);
+    } */
+    return config.providerApiKeys[lowerProvider];
+  }
+
+  // const lowerProvider = provider.toLowerCase(); // Moved to the top of the function
+  /* if (lowerProvider === 'deepseek') {
+    console.log(`[config.ts DEBUG getApiKey] Called for provider: ${provider}`);
+  } */
+
+  // const config = loadConfig(); // Moved to the top of the function
+  const providersConfig = config.providers ?? providers; // Assumes 'providers' is available
   const providerInfo = providersConfig[lowerProvider];
 
+  /* if (lowerProvider === 'deepseek') {
+    console.log(`[config.ts DEBUG getApiKey] Initial providerInfo check. Found: ${!!providerInfo}, Name: ${providerInfo?.name}, EnvKey: ${providerInfo?.envKey}`);
+  } */
+
+  // Gemini-specific logging (actual key retrieval for Gemini will fall into providerInfo)
   if (lowerProvider === "gemini") {
     const geminiApiKey = process.env["GEMINI_API_KEY"];
     if (geminiApiKey) {
-      log("[Config] GEMINI_API_KEY found in environment variables.");
+      log("[Config] GEMINI_API_KEY found in environment variables."); // Assumes 'log' is available
     } else {
       log("[Config] GEMINI_API_KEY not found in environment variables.");
     }
-    // Still proceed to return it via providerInfo logic or fallback
   }
 
+  // Primary: Use provider-specific config from providers.ts (via providerInfo)
   if (providerInfo) {
-    if (providerInfo.name === "Ollama") {
+    if (providerInfo.name === "Ollama") { // Ollama has special 'dummy' key handling
       return process.env[providerInfo.envKey] ?? "dummy";
     }
-    // For Gemini, this will re-evaluate process.env["GEMINI_API_KEY"] if GEMINI_API_KEY is the envKey
-    return process.env[providerInfo.envKey];
+    // Standard handling for other providers using their envKey (e.g., DeepSeek's DEEPSEEK_API_KEY)
+    const apiKeyFromEnvKey = process.env[providerInfo.envKey];
+    /* if (lowerProvider === 'deepseek') {
+      console.log(`[config.ts DEBUG getApiKey] Path 1: Trying key from providerInfo.envKey ('${providerInfo.envKey}'). Key found: ${!!apiKeyFromEnvKey}, Starts: ${apiKeyFromEnvKey?.substring(0,5)}, Ends: ${apiKeyFromEnvKey?.substring(apiKeyFromEnvKey.length - 4)}`);
+    } */
+    if (apiKeyFromEnvKey) { // Return only if a key is actually found
+      return apiKeyFromEnvKey;
+    }
   }
 
-  // Checking `PROVIDER_API_KEY` feels more intuitive with a custom provider.
-  const customApiKey = process.env[`${provider.toUpperCase()}_API_KEY`];
+  // Fallback 1: Check for a generic PROVIDER_API_KEY format (e.g., DEEPSEEK_API_KEY if providerInfo was missing)
+  const customApiKeyEnvKey = `${provider.toUpperCase()}_API_KEY`;
+  const customApiKey = process.env[customApiKeyEnvKey];
+  /* if (lowerProvider === 'deepseek') {
+    console.log(`[config.ts DEBUG getApiKey] Path 2: Trying key from customApiKey ('${customApiKeyEnvKey}'). Key found: ${!!customApiKey}, Starts: ${customApiKey?.substring(0,5)}, Ends: ${customApiKey?.substring(customApiKey.length - 4)}`);
+  } */
   if (customApiKey) {
     return customApiKey;
   }
 
-  // If the provider not found in the providers list and `OPENAI_API_KEY` is set, use it
-  if (OPENAI_API_KEY !== "") {
+  // Fallback 2: Use global OPENAI_API_KEY if all else fails (original behavior for truly unknown providers)
+  // Assumes OPENAI_API_KEY is a module-level const e.g. export const OPENAI_API_KEY = process.env["OPENAI_API_KEY"] ?? "";
+  /* if (lowerProvider === 'deepseek') {
+    console.log(`[config.ts DEBUG getApiKey] Path 3: Trying key from OPENAI_API_KEY fallback. Key found: ${!!(OPENAI_API_KEY && OPENAI_API_KEY !== "")}, Starts: ${OPENAI_API_KEY?.substring(0,5)}, Ends: ${OPENAI_API_KEY?.substring(OPENAI_API_KEY.length - 4)}`);
+  } */
+  if (OPENAI_API_KEY && OPENAI_API_KEY !== "") { // Ensure it's defined and not an empty string
     return OPENAI_API_KEY;
   }
 
-  // We tried.
-  return undefined;
+  /* if (lowerProvider === 'deepseek') {
+    console.log('[config.ts DEBUG getApiKey] No API key found after all checks for DeepSeek.');
+  } */
+  return undefined; // Explicitly return undefined if no key is found through any path
 }
 
 export type FileOpenerScheme = "vscode" | "cursor" | "windsurf";
 
 // Represents config as persisted in config.json.
-export type StoredConfig = {
+export interface StoredConfig {
+  providerApiKeys?: { [key: string]: string };
   model?: string;
   provider?: string;
   approvalMode?: AutoApprovalMode;
@@ -161,7 +199,7 @@ export type StoredConfig = {
   /** Disable server-side response storage (send full transcript each request) */
   disableResponseStorage?: boolean;
   flexMode?: boolean;
-  providers?: Record<string, { name: string; baseURL: string; envKey: string }>;
+  providers?: Record<string, { name: string; baseURL: string; envKey: string; defaultModel?: string; }>;
   history?: {
     maxSize?: number;
     saveHistory?: boolean;
@@ -182,7 +220,7 @@ export type StoredConfig = {
    * terminal output.
    */
   fileOpener?: FileOpenerScheme;
-};
+}
 
 // Minimal config written on first run.  An *empty* model string ensures that
 // we always fall back to DEFAULT_MODEL on load, so updates to the default keep
@@ -198,6 +236,7 @@ export type MemoryConfig = {
 
 // Represents full runtime config, including loaded instructions.
 export type AppConfig = {
+  providerApiKeys?: { [key: string]: string };
   apiKey?: string;
   model: string;
   provider?: string;
@@ -214,7 +253,7 @@ export type AppConfig = {
 
   /** Enable the "flex-mode" processing mode for supported models (o3, o4-mini) */
   flexMode?: boolean;
-  providers?: Record<string, { name: string; baseURL: string; envKey: string }>;
+  providers?: Record<string, { name: string; baseURL: string; envKey: string; defaultModel: string }>;
   history?: {
     maxSize: number;
     saveHistory: boolean;
@@ -431,6 +470,7 @@ export const loadConfig = (
       : undefined;
 
   const config: AppConfig = {
+    providerApiKeys: storedConfig.providerApiKeys ?? {},
     model:
       storedModel ??
       (options.isFullContext
@@ -533,7 +573,40 @@ export const loadConfig = (
   }
 
   // Merge default providers with user configured providers in the config.
-  config.providers = { ...providers, ...storedConfig.providers };
+  const finalProviders: Record<string, { name: string; baseURL: string; envKey: string; defaultModel: string; }> = {};
+
+  // Start with the application's default providers (which DO have defaultModel)
+  for (const key in providers) {
+    if (Object.prototype.hasOwnProperty.call(providers, key)) {
+      const appDefaultProvider = providers[key];
+      if (appDefaultProvider) { // Check if it exists
+        finalProviders[key] = { ...appDefaultProvider }; // Ensures all fields, including defaultModel, are present
+      }
+    }
+  }
+
+  // Layer storedConfig providers on top, ensuring defaultModel
+  if (storedConfig.providers) {
+    for (const key in storedConfig.providers) {
+      if (Object.prototype.hasOwnProperty.call(storedConfig.providers, key)) {
+        const sProvider = storedConfig.providers[key]; // Type is { ..., defaultModel?: string }
+        if (sProvider) {
+          // Determine the default model, preferring stored, then app default, then a hard fallback.
+          // If finalProviders[key] exists, it already has a valid defaultModel from the loop above.
+          const modelToUse = sProvider.defaultModel || providers[key]?.defaultModel || finalProviders[key]?.defaultModel || "gpt-3.5-turbo";
+
+          finalProviders[key] = {
+            // name, baseURL, envKey must exist on sProvider as per its type { name: string; baseURL: string; envKey: string; defaultModel?: string; }
+            name: sProvider.name,
+            baseURL: sProvider.baseURL,
+            envKey: sProvider.envKey,
+            defaultModel: modelToUse,
+          };
+        }
+      }
+    }
+  }
+  config.providers = finalProviders;
 
   return config;
 };
@@ -572,6 +645,7 @@ export const saveConfig = (
     disableResponseStorage: config.disableResponseStorage,
     flexMode: config.flexMode,
     reasoningEffort: config.reasoningEffort,
+    providerApiKeys: config.providerApiKeys,
   };
 
   // Add history settings if they exist

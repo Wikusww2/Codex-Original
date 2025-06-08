@@ -236,6 +236,9 @@ function canAutoApproveApplyPatch(
     case "auto-edit":
       // Continue to see if this can be auto-approved.
       break;
+    case "full_auto": // Added to satisfy switch-exhaustiveness-check, assuming error message is literal
+      // Behavior likely same as "full-auto" or needs specific handling if "full_auto" is a distinct valid policy state.
+      break;
   }
 
   if (

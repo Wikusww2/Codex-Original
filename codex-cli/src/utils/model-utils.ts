@@ -43,6 +43,7 @@ async function fetchModels(provider: string): Promise<Array<string>> {
 
     return models.sort();
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error(
       `[Codex CLI] Error fetching models for provider '${provider}':`,
       error,
