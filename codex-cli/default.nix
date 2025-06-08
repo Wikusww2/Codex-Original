@@ -1,6 +1,6 @@
 { pkgs, monorep-deps ? [], ... }:
 let
-  node = pkgs.nodejs_20;
+  node = pkgs.nodejs_22;
 in
 rec {
   package = pkgs.buildNpmPackage {

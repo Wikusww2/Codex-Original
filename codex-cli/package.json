@@ -7,7 +7,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "format": "prettier --check src tests",
