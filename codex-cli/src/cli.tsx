@@ -71,13 +71,13 @@ if (dotenvResult.error) {
 // console.log(`[CLI DEBUG] process.env['OPENAI_API_KEY'] after dotenv: ${process.env['OPENAI_API_KEY'] ? 'SET (' + process.env['OPENAI_API_KEY']!.substring(0,5) + '...)' : 'NOT SET'}`);
 // console.log(`[CLI DEBUG] process.env['DEEPSEEK_API_KEY'] after dotenv: ${process.env['DEEPSEEK_API_KEY'] ? 'SET (' + process.env['DEEPSEEK_API_KEY']!.substring(0,5) + '...)' : 'NOT SET'}`);
 
-// Exit early if on an older version of Node.js (< 22)
+// Exit early if on an older version of Node.js (< 20)
 const major = process.versions.node.split(".").map(Number)[0]!;
-if (major < 22) {
+if (major < 20) {
   // eslint-disable-next-line no-console
   console.error(
     "\n" +
-      "Codex CLI requires Node.js version 22 or newer.\n" +
+      "Codex CLI requires Node.js version 20 or newer.\n" +
       `You are running Node.js v${process.versions.node}.\n` +
       "Please upgrade Node.js: https://nodejs.org/en/download/\n",
   );
