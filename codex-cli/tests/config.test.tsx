@@ -5,6 +5,7 @@ import {
   saveConfig,
   DEFAULT_SHELL_MAX_BYTES,
   DEFAULT_SHELL_MAX_LINES,
+  DEFAULT_AGENTIC_MODEL,
 } from "../src/utils/config.js";
 import { AutoApprovalMode } from "../src/utils/auto-approval-mode.js";
 import { tmpdir } from "os";
@@ -67,7 +68,7 @@ test("loads default config if files don't exist", () => {
   });
   // Keep the test focused on just checking that default model and instructions are loaded
   // so we need to make sure we check just these properties
-  expect(config.model).toBe("codex-mini-latest");
+  expect(config.model).toBe(DEFAULT_AGENTIC_MODEL);
   expect(config.instructions).toBe("");
 });
 
