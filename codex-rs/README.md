@@ -2,7 +2,7 @@
 
 April 24, 2025
 
-Today, Codex CLI is written in TypeScript and requires Node.js 20+ to run it. For a number of users, this runtime requirement inhibits adoption: they would be better served by a standalone executable. As maintainers, we want Codex to run efficiently in a wide range of environments with minimal overhead. We also want to take advantage of operating system-specific APIs to provide better sandboxing, where possible.
+Today, Codex CLI is written in TypeScript and requires Node.js 22+ to run it. For a number of users, this runtime requirement inhibits adoption: they would be better served by a standalone executable. As maintainers, we want Codex to run efficiently in a wide range of environments with minimal overhead. We also want to take advantage of operating system-specific APIs to provide better sandboxing, where possible.
 
 To that end, we are moving forward with a Rust implementation of Codex CLI contained in this folder, which has the following benefits:
 
