@@ -586,11 +586,12 @@ export function isSafeCommand(
       const subCommand = cmdArray[1]?.toLowerCase();
       if (!subCommand) {return null;}
 
+      const GIT_SHOW_REASON = "View specific commit/object";
       const safeSubCommands: Record<string, string> = {
         "status": "View status",
         "diff": "View differences",
         "log": "View history",
-        "show": "View specific commit/object",
+        "show": GIT_SHOW_REASON,
         "branch": "List branches",
         "tag": "List tags",
         "rev-parse": "Find commit IDs",
