@@ -205,8 +205,8 @@ The hardening mechanism Codex uses depends on your OS:
 | Requirement                 | Details                                                            |
 | --------------------------- | ------------------------------------------------------------------ |
 | Operating systems           | macOS 12+, Ubuntu 20.04+/Debian 10+, or Windows 11 **via WSL2**    |
-| Node.js                     | **22 or newer** (LTS recommended)                                  |
-|                             | If your system defaults to an older Node version, run `nvm use 22` |
+| Node.js                     | **20 or newer** (LTS recommended)                                  |
+|                             | If your system defaults to an older Node version, run `nvm use 20` |
 | Git (optional, recommended) | 2.23+ for built-in PR helpers                                      |
 | RAM                         | 4-GB minimum (8-GB recommended)                                    |
 
@@ -511,7 +511,7 @@ Codex runs model-generated commands in a sandbox. If a proposed command or file 
 <details>
 <summary>Does it work on Windows?</summary>
 
-Not directly. It requires [Windows Subsystem for Linux (WSL2)](https://learn.microsoft.com/en-us/windows/wsl/install) - Codex has been tested on macOS and Linux with Node 22.
+Not directly. It requires [Windows Subsystem for Linux (WSL2)](https://learn.microsoft.com/en-us/windows/wsl/install) - Codex has been tested on macOS and Linux with Node 20.
 
 </details>
 
