@@ -1,4 +1,4 @@
-// @ts-expect-error select.js is JavaScript and has no types
+// @ts-ignore select.js is JavaScript and has no types
 import { Select } from "../vendor/ink-select/select";
 import { Box, Text } from "ink";
 import React from "react";
@@ -14,6 +14,8 @@ export function OnboardingApprovalMode(): React.ReactElement {
       <Select
         onChange={() => {}}
         // onChange={(value: ReviewDecision) => onReviewCommand(value)}
+        highlightText=""
+        defaultValue={AutoApprovalMode.SUGGEST}
         options={[
           {
             label: "Auto-approve file reads, but ask me for edits and commands",

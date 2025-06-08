@@ -290,14 +290,24 @@ const createCompletion = (
   //   )}`,
   // ); // Log model for brevity
   const fullMessages = getFullMessages(input);
-  const chatTools = convertTools(input.tools);
-  const webSearchOptions =
-    sessionConfig?.webAccess &&
-    input.tools?.some(
-      (tool) => tool.type === "function" && tool.name === "web_search",
-    )
-      ? {}
-      : undefined;
+  let chatTools = convertTools(input.tools);
+  if (sessionConfig.webAccess) {
+    const webTool = {
+      type: "function" as const,
+      function: {
+        name: "web_search",
+        description: "Search the web for up-to-date information",
+        parameters: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    } satisfies OpenAI.Chat.Completions.ChatCompletionTool;
+    chatTools = chatTools ? [...chatTools, webTool] : [webTool];
+  }
+  const webSearchOptions = sessionConfig.webAccess ? {} : undefined;
 
   const chatInput: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
     model: input.model,

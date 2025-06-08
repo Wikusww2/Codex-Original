@@ -138,6 +138,20 @@ const shellFunctionTool: FunctionTool = {
   },
 };
 
+const webSearchFunctionTool: FunctionTool = {
+  type: "function",
+  name: "web_search",
+  description: "Search the web for up-to-date information.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Search query" },
+    },
+    required: ["query"],
+    additionalProperties: false,
+  },
+};
+
 const localShellTool: LocalShellTool = {
   type: "local_shell",
 };
@@ -655,8 +669,14 @@ export class AgentLoop {
       let transcriptPrefixLen = 0;
 
       let tools: Array<Tool> = [shellFunctionTool];
+      if (this.config.webAccess) {
+        tools.push(webSearchFunctionTool);
+      }
       if (this.model.startsWith("codex")) {
         tools = [localShellTool];
+        if (this.config.webAccess) {
+          tools.push(webSearchFunctionTool);
+        }
       }
 
       const stripInternalFields = (

@@ -22,6 +22,7 @@ describe("TerminalChatInput compact command", () => {
       openApprovalOverlay: () => {},
       openHelpOverlay: () => {},
       openSessionsOverlay: () => {},
+      openWebOverlay: () => {},
       onCompact: () => {},
     };
     const { lastFrameStripped } = renderTui(<TerminalChatInput {...props} />);

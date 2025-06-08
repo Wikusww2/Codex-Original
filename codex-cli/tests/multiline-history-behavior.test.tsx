@@ -76,6 +76,7 @@ function stubProps(): any {
     openModelOverlay: vi.fn(),
     openProviderOverlay: vi.fn(),
     openHelpOverlay: vi.fn(),
+    openWebOverlay: vi.fn(),
     interruptAgent: vi.fn(),
     active: true,
   };

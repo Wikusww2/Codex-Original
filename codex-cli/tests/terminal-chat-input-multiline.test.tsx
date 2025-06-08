@@ -44,6 +44,7 @@ describe("TerminalChatInput multiline functionality", () => {
       openApprovalOverlay: () => {},
       openHelpOverlay: () => {},
       openSessionsOverlay: () => {},
+      openWebOverlay: () => {},
       onCompact: () => {},
     };
 
@@ -94,6 +95,7 @@ describe("TerminalChatInput multiline functionality", () => {
       openApprovalOverlay: () => {},
       openHelpOverlay: () => {},
       openSessionsOverlay: () => {},
+      openWebOverlay: () => {},
       onCompact: () => {},
     };
 
