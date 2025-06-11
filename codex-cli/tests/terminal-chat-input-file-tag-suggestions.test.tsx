@@ -77,6 +77,7 @@ describe("TerminalChatInput file tag suggestions", () => {
     openApprovalOverlay: vi.fn(),
     openHelpOverlay: vi.fn(),
     openSessionsOverlay: vi.fn(),
+    openWebOverlay: vi.fn(), // Added to satisfy TS2741
     onCompact: vi.fn(),
   };
 
@@ -90,7 +91,7 @@ describe("TerminalChatInput file tag suggestions", () => {
     );
 
     // Type @ and activate suggestions
-    await typeFileTag(stdin, flush);
+    await typeFileTag(stdin as any, flush);
 
     // Check that current directory suggestions are shown
     const frame = lastFrameStripped();
@@ -105,10 +106,10 @@ describe("TerminalChatInput file tag suggestions", () => {
     );
 
     // Type @ and activate suggestions
-    await typeFileTag(stdin, flush);
+    await typeFileTag(stdin as any, flush);
 
     // Press Tab to select the first suggestion
-    await type(stdin, "\t", flush);
+    await type(stdin as any, "\t", flush);
 
     // Check that the input has been completed with the selected suggestion
     const frameAfterTab = lastFrameStripped();
@@ -127,14 +128,14 @@ describe("TerminalChatInput file tag suggestions", () => {
     );
 
     // Type @ and activate suggestions
-    await typeFileTag(stdin, flush);
+    await typeFileTag(stdin as any, flush);
 
     // Check that suggestions are shown
     let frame = lastFrameStripped();
     expect(frame).toContain("file1.txt");
 
     // Type a space to clear suggestions
-    await type(stdin, " ", flush);
+    await type(stdin as any, " ", flush);
 
     // Check that suggestions are cleared
     frame = lastFrameStripped();
@@ -149,18 +150,18 @@ describe("TerminalChatInput file tag suggestions", () => {
     );
 
     // Type @ and activate suggestions
-    await typeFileTag(stdin, flush);
+    await typeFileTag(stdin as any, flush);
 
     // Navigate to directory suggestion (we need two down keys to get to the first directory)
-    await type(stdin, "\u001B[B", flush); // Down arrow key - move to file2.js
-    await type(stdin, "\u001B[B", flush); // Down arrow key - move to directory1/
+    await type(stdin as any, "\u001B[B", flush); // Down arrow key - move to file2.js
+    await type(stdin as any, "\u001B[B", flush); // Down arrow key - move to directory1/
 
     // Check that the directory suggestion is selected
     let frame = lastFrameStripped();
     expect(frame).toContain("directory1/");
 
     // Press Enter to select the directory
-    await type(stdin, "\r", flush);
+    await type(stdin as any, "\r", flush);
 
     // Check that the input now contains the directory path
     frame = lastFrameStripped();
@@ -178,10 +179,10 @@ describe("TerminalChatInput file tag suggestions", () => {
     );
 
     // Type @ and activate suggestions
-    await typeFileTag(stdin, flush);
+    await typeFileTag(stdin as any, flush);
 
     // Press Enter to select first suggestion (file1.txt)
-    await type(stdin, "\r", flush);
+    await type(stdin as any, "\r", flush);
 
     // Check that submitInput was called
     expect(baseProps.submitInput).toHaveBeenCalled();

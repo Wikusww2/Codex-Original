@@ -1,4 +1,6 @@
 import type { OverlayModeType } from "./terminal-chat";
+import { processCitations } from "../../utils/citation-processing";
+import type { ChatCompletionMessage } from "openai/resources/chat/completions";
 import type { TerminalRendererOptions } from "marked-terminal";
 import type {
   ResponseFunctionToolCallItem,
@@ -18,7 +20,7 @@ import { Box, Text } from "ink";
 import { parse, setOptions } from "marked";
 import TerminalRenderer from "marked-terminal";
 import path from "path";
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import { formatCommandForDisplay } from "src/format-command.js";
 import supportsHyperlinks from "supports-hyperlinks";
 
@@ -145,29 +147,43 @@ function TerminalChatResponseMessage({
     }
   }, [message, setOverlayMode]);
 
+  const citationResult = useMemo(() => {
+    if (message.role === "assistant") {
+      // The 'annotations' property is on the ChatCompletionMessage type.
+      // We cast here to access it, assuming ResponseOutputMessage is compatible.
+      return processCitations(message as unknown as ChatCompletionMessage);
+    }
+    return null;
+  }, [message]);
+
+  const originalContent = message.content
+    .map(
+      (c) =>
+        c.type === "output_text"
+          ? c.text
+          : c.type === "refusal"
+            ? c.refusal
+            : c.type === "input_text"
+              ? collapseXmlBlocks(c.text)
+              : c.type === "input_image"
+                ? "<Image>"
+                : c.type === "input_file"
+                  ? c.filename
+                  : "", // unknown content type
+    )
+    .join(" ");
+
   return (
     <Box flexDirection="column">
       <Text bold color={colorsByRole[message.role] || "gray"}>
         {message.role === "assistant" ? "codex" : message.role}
       </Text>
       <Markdown fileOpener={fileOpener}>
-        {message.content
-          .map(
-            (c) =>
-              c.type === "output_text"
-                ? c.text
-                : c.type === "refusal"
-                  ? c.refusal
-                  : c.type === "input_text"
-                    ? collapseXmlBlocks(c.text)
-                    : c.type === "input_image"
-                      ? "<Image>"
-                      : c.type === "input_file"
-                        ? c.filename
-                        : "", // unknown content type
-          )
-          .join(" ")}
+        {citationResult ? citationResult.processedContent : originalContent}
       </Markdown>
+      {citationResult && (
+        <Text dimColor>{citationResult.citationsList}</Text>
+      )}
     </Box>
   );
 }

@@ -2,7 +2,7 @@ import React from "react";
 import type { ComponentProps } from "react";
 import { renderTui } from "./ui-test-helpers.js";
 import TerminalChatInput from "../src/components/chat/terminal-chat-input.js";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 describe("TerminalChatInput compact command", () => {
   it("shows /compact hint when context is low", async () => {
@@ -22,6 +22,7 @@ describe("TerminalChatInput compact command", () => {
       openApprovalOverlay: () => {},
       openHelpOverlay: () => {},
       openSessionsOverlay: () => {},
+      openWebOverlay: vi.fn(), // Added to satisfy TS2741
       onCompact: () => {},
     };
     const { lastFrameStripped } = renderTui(<TerminalChatInput {...props} />);

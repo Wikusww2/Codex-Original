@@ -52,6 +52,9 @@ export interface TerminalChatInputProps {
   onCompact: () => void;
   items: Array<ResponseInputItem>;
   workdir?: string;
+  onWebAccessToggle?: () => void;
+  webSearching?: boolean;
+  webAccessMode?: boolean;
 }
 
 export default function TerminalChatInput({
@@ -73,6 +76,9 @@ export default function TerminalChatInput({
   onCompact,
   items = [],
   workdir,
+  onWebAccessToggle,
+  webSearching = false,
+  webAccessMode = false,
 }: TerminalChatInputProps): React.ReactElement {
   const [selectedSlashSuggestion, setSelectedSlashSuggestion] =
     useState<number>(0);
@@ -204,6 +210,22 @@ export default function TerminalChatInput({
             return;
           }
           if (command.command === "/model") {
+            if (webAccessMode) {
+              setItems([
+                ...items,
+                {
+                  type: "message",
+                  role: "system",
+                  content: [
+                    {
+                      type: "input_text",
+                      text: "Model switching is disabled in current mode. Use /web to change modes.",
+                    },
+                  ],
+                },
+              ]);
+              return;
+            }
             openModelOverlay();
             return;
           }
@@ -216,11 +238,7 @@ export default function TerminalChatInput({
             return;
           }
           if (command.command === "/web") {
-            openWebOverlay();
-            return;
-          }
-          if (command.command === "/sessions") {
-            openSessionsOverlay();
+            if (onWebAccessToggle) onWebAccessToggle();
             return;
           }
           if (command.command === "/bug") {
@@ -406,7 +424,19 @@ export default function TerminalChatInput({
     },
   );
 
-  useEffect(() => {}, []);
+  const spinnerFrames = ["|", "/", "-", "\\"];
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    if (webSearching && loading && !confirmationPrompt) {
+      const timer = setInterval(() => setFrame(f => (f + 1) % spinnerFrames.length), 120);
+      return () => clearInterval(timer);
+    }
+    return undefined;
+  }, [webSearching, loading, confirmationPrompt]);
+
+  if (webSearching && loading && !confirmationPrompt) {
+    return <Text color="cyan">{spinnerFrames[frame]} 🌐 Searching the web...</Text>;
+  }
 
   if (loading && !confirmationPrompt) {
     return <Text>Loading...</Text>;

@@ -40,7 +40,7 @@ import {
 } from './utils/get-api-key';
 import { createInputItem } from './utils/input-utils';
 import { initLogger } from './utils/logger/log';
-import { isModelSupportedForResponses } from './utils/model-utils.js'; // Before parsers
+
 import { parseToolCall } from './utils/parsers'; // After model-utils
 import { onExit, setInkRenderer } from './utils/terminal';
 import chalk from 'chalk';
@@ -53,6 +53,7 @@ import os from 'os';
 import path from 'path';
 import React from 'react';
 import * as url from 'url';
+import OpenAI from 'openai';
 
 // ES Module equivalents for __filename and __dirname
 const __filename = url.fileURLToPath(import.meta.url);
@@ -106,6 +107,7 @@ const cli = meow(
   Usage
     $ codex [options] <prompt>
     $ codex completion <bash|zsh|fish>
+    $ codex models
 
   Options
     --version                       Print version and exit
@@ -258,6 +260,69 @@ const cli = meow(
 // Global flag handling
 // ---------------------------------------------------------------------------
 
+// Handle 'models' command
+if (cli.input[0] === 'models') {
+  (async () => {
+    // Note: loadConfig is synchronous
+    const config = loadConfig();
+    const providerName = cli.flags.provider || config.provider;
+
+    if (!providerName) {
+        console.error(`${chalk.red('Error:')} No provider specified. Use the --provider flag or set a default provider in your config.`);
+        process.exit(1);
+    }
+
+    const providerInfo = config.providers?.[providerName.toLowerCase()];
+
+    if (!providerInfo) {
+        console.error(`${chalk.red('Error:')} Provider '${providerName}' not found in configuration.`);
+        process.exit(1);
+    }
+
+    const apiKey = getApiKey(providerName);
+    const NO_API_KEY_REQUIRED = new Set(["ollama"]);
+
+    if (!apiKey && !NO_API_KEY_REQUIRED.has(providerName.toLowerCase())) {
+        const apiKeyName = (providerInfo.envKey) ?? `${providerName.toUpperCase()}_API_KEY`;
+        console.error(
+            `\n${chalk.red(`Missing ${providerName} API key.`)}\n\n` +
+            `Set the environment variable ${chalk.bold(apiKeyName)}, or run with --login, ` +
+            `or ensure the key is in ~/.codex/config.json under providerApiKeys.${providerName.toLowerCase()}\n` +
+            `and re-run this command.\n`
+        );
+        process.exit(1);
+    }
+
+    const openai = new OpenAI({
+        apiKey: apiKey,
+        baseURL: providerInfo.baseURL,
+    });
+
+    try {
+        console.log(`Fetching available models from '${providerInfo.name}'...`);
+        const models = await openai.models.list();
+        console.log(`\nAvailable models for ${chalk.bold(providerInfo.name)}:`);
+        const sortedModels = models.data.sort((a, b) => a.id.localeCompare(b.id));
+        sortedModels.forEach((model) => {
+            console.log(`- ${model.id}`);
+        });
+        console.log(`\n${chalk.green('Tip:')} You can set a model using the ${chalk.bold('--model')} flag or in your config file.`);
+        console.log(`For web-enabled features, update the ${chalk.bold('"webModel"')} property in your config with a suitable model.`);
+    } catch (error: any) {
+        console.error(`\n${chalk.red('Error fetching models from ' + providerInfo.name + ':')} ${error.message}`);
+        if (error.status === 401) {
+            console.error(chalk.red(`Authentication error. Please check your API key for ${providerInfo.name}.`));
+        } else {
+            console.error(`Please check your API key and network connection.`);
+        }
+    }
+    process.exit(0);
+  })().catch(err => {
+      console.error("An unexpected error occurred while fetching models:", err);
+      process.exit(1);
+  });
+} else {
+
 // Handle 'completion' subcommand before any prompting or API calls
 if (cli.input[0] === "completion") {
   const shell = cli.input[1] || "bash";
@@ -338,6 +403,14 @@ if (cli.flags.model) {
 } else {
   // No model flag, use default for the session's provider
   config.model = config.providers?.[sessionEffectiveProvider]?.defaultModel ?? config.model; // Fallback to existing config.model if lookup fails
+}
+
+// If web access is enabled in the config, override the model to the web-enabled model.
+// This ensures the correct model is used on startup without relying on component effects.
+// If web access is enabled in the config, override the model to the configured web model.
+// This ensures the correct model is used on startup without relying on component effects.
+if (config.webAccess) {
+  config.model = config.webModel;
 }
 
 // 'provider' variable to be used for API key logic etc.
@@ -507,19 +580,19 @@ if (config.flexMode) {
   }
 }
 
-if (
-  !(await isModelSupportedForResponses(provider, config.model)) &&
-  (!provider || provider.toLowerCase() === "openai")
-) {
-  // eslint-disable-next-line no-console
-  console.error(
-    `The model "${config.model}" does not appear in the list of models ` +
-      `available to your account. Double-check the spelling (use\n` +
-      `  openai models list\n` +
-      `to see the full list) or choose another model with the --model flag.`,
-  );
-  process.exit(1);
-}
+// if (
+//   !(await isModelSupportedForResponses(provider, config.model)) &&
+//   (!provider || provider.toLowerCase() === "openai")
+// ) {
+//   // eslint-disable-next-line no-console
+//   console.error(
+//     `The model "${config.model}" does not appear in the list of models ` +
+//       `available to your account. Double-check the spelling (use\n` +
+//       `  openai models list\n` +
+//       `to see the full list) or choose another model with the --model flag.`,
+//   );
+//   process.exit(1);
+// }
 
 let rollout: AppRollout | undefined;
 
@@ -666,7 +739,7 @@ setInkRenderer(instance);
 
 type CustomContentPart =
   | { type: "output_text"; text: string }
-  | { type: "input_text"; text: string }
+  | { type: "text"; text: string }
   | { type: "input_image"; [key: string]: unknown } // Define more strictly if image props are used
   | { type: "input_file"; filename: string }
   | { type: "refusal"; refusal: string };
@@ -714,7 +787,7 @@ function formatResponseItemForQuietMode(item: CliResponseItem): string {
       const role = item.role === "assistant" ? "assistant" : item.role;
       const txt = item.content
         .map((c: CustomContentPart) => {
-          if (c.type === "output_text" || c.type === "input_text") {
+          if (c.type === "output_text" || c.type === "text") {
             return c.text;
           }
           if (c.type === "input_image") {
@@ -774,10 +847,10 @@ async function runQuietMode({
   config: AppConfig;
 }): Promise<void> {
   const agent = new AgentLoop({
-    model: config.model,
+    model: cli.flags.model || config.model,
     config: config,
     instructions: config.instructions,
-    provider: config.provider,
+    provider: cli.flags.provider || config.provider,
     approvalPolicy,
     additionalWritableRoots,
     disableResponseStorage: config.disableResponseStorage,
@@ -810,7 +883,11 @@ async function runQuietMode({
   });
 
   const inputItem = await createInputItem(prompt, imagePaths);
-  await agent.run([inputItem]);
+  try {
+    await agent.run([inputItem]);
+  } catch (error) {
+    console.error('[DEBUG Quiet Mode Error]', error);
+  }
 }
 
 const exit = () => {
@@ -843,3 +920,5 @@ if (process.stdin.isTTY) {
 // Ensure terminal clean-up always runs, even when other code calls
 // `process.exit()` directly.
 process.once("exit", onExit);
+
+}

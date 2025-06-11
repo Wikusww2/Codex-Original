@@ -44,6 +44,7 @@ describe("TerminalChatInput multiline functionality", () => {
       openApprovalOverlay: () => {},
       openHelpOverlay: () => {},
       openSessionsOverlay: () => {},
+      openWebOverlay: vi.fn(), // Added to satisfy TS2741
       onCompact: () => {},
     };
 
@@ -52,13 +53,13 @@ describe("TerminalChatInput multiline functionality", () => {
     );
 
     // Type some text
-    await type(stdin, "first line", flush);
+    await type(stdin as any, "first line", flush);
 
     // Send Shift+Enter (CSI-u format)
-    await type(stdin, "\u001B[13;2u", flush);
+    await type(stdin as any, "\u001B[13;2u", flush);
 
     // Type more text
-    await type(stdin, "second line", flush);
+    await type(stdin as any, "second line", flush);
 
     // Check that both lines are visible in the editor
     const frame = lastFrameStripped();
@@ -66,7 +67,7 @@ describe("TerminalChatInput multiline functionality", () => {
     expect(frame).toContain("second line");
 
     // Submit the multiline input with Enter
-    await type(stdin, "\r", flush);
+    await type(stdin as any, "\r", flush);
 
     // Check that submitInput was called with the multiline text
     expect(submitInput).toHaveBeenCalledTimes(1);
@@ -94,6 +95,7 @@ describe("TerminalChatInput multiline functionality", () => {
       openApprovalOverlay: () => {},
       openHelpOverlay: () => {},
       openSessionsOverlay: () => {},
+      openWebOverlay: vi.fn(), // Added to satisfy TS2741
       onCompact: () => {},
     };
 
@@ -102,13 +104,13 @@ describe("TerminalChatInput multiline functionality", () => {
     );
 
     // Type some text
-    await type(stdin, "first line", flush);
+    await type(stdin as any, "first line", flush);
 
     // Send Shift+Enter (modifyOtherKeys=1 format)
-    await type(stdin, "\u001B[27;2;13~", flush);
+    await type(stdin as any, "\u001B[27;2;13~", flush);
 
     // Type more text
-    await type(stdin, "second line", flush);
+    await type(stdin as any, "second line", flush);
 
     // Check that both lines are visible in the editor
     const frame = lastFrameStripped();
@@ -116,7 +118,7 @@ describe("TerminalChatInput multiline functionality", () => {
     expect(frame).toContain("second line");
 
     // Submit the multiline input with Enter
-    await type(stdin, "\r", flush);
+    await type(stdin as any, "\r", flush);
 
     // Check that submitInput was called with the multiline text
     expect(submitInput).toHaveBeenCalledTimes(1);

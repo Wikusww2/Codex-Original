@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Search Test</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>OpenAI Web Search Test</h1>
+        <div class="input-area">
+            <input type="text" id="searchInput" placeholder="Ask something...">
+            <button id="searchButton">Search</button>
+        </div>
+        <div id="loadingIndicator" style="display: none;">Searching the web and thinking...</div>
+        <div id="errorDisplay" class="error-message"></div>
+        <div id="resultsArea">
+            <h2>Response:</h2>
+            <div id="responseText"></div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

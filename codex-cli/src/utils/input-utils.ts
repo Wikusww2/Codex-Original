@@ -11,7 +11,7 @@ export async function createInputItem(
 ): Promise<ResponseInputItem.Message> {
   const inputItem: ResponseInputItem.Message = {
     role: "user",
-    content: [{ type: "input_text", text }],
+    content: [{ type: "text", text }] as any,
     type: "message",
   };
 
@@ -30,9 +30,9 @@ export async function createInputItem(
       });
     } catch (err) {
       inputItem.content.push({
-        type: "input_text",
+        type: "text",
         text: `[missing image: ${path.basename(filePath)}]`,
-      });
+      } as any);
     }
   }
 

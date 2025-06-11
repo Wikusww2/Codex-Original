@@ -7,7 +7,7 @@ import type { ResponseItem } from "openai/resources/responses/responses";
 import { TerminalChat } from "./components/chat/terminal-chat";
 import TerminalChatPastRollout from "./components/chat/terminal-chat-past-rollout";
 import { checkInGit } from "./utils/check-in-git";
-import { getApiKey } from "./utils/config";
+import { getApiKey, saveConfig } from "./utils/config";
 import { log } from "./utils/logger/log";
 import { onExit } from "./utils/terminal";
 import { CLI_VERSION } from "./version";
@@ -30,6 +30,9 @@ type Props = {
   fullStdout: boolean;
 };
 
+const WEBSEARCH_MODEL = "gpt-4o-search-preview";
+const NANO_MODEL = "gpt-4.1-nano";
+
 export default function App({
   prompt,
   config: initialConfig, // Renamed prop for clarity
@@ -42,6 +45,17 @@ export default function App({
   const app = useApp();
   const [accepted, setAccepted] = useState(() => false);
   const [currentConfig, setCurrentConfig] = useState<AppConfig>(initialConfig);
+  const [webSearchWarning, setWebSearchWarning] = useState<string | null>(null);
+  const [preWebSearchModel, setPreWebSearchModel] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (currentConfig.webAccess && currentConfig.model !== WEBSEARCH_MODEL) {
+      setCurrentConfig((prev) => ({
+        ...prev,
+        model: WEBSEARCH_MODEL,
+      }));
+    }
+  }, [currentConfig.webAccess, currentConfig.model]);
 
   const handleProviderChange = (newProviderName: string, selectedModel?: string) => {
     log(`App: handleProviderChange called with Provider: ${newProviderName}, Selected Model: ${selectedModel}`);
@@ -57,6 +71,43 @@ export default function App({
       };
     });
   };
+  const handleWebAccessChange = (newWebAccessState: boolean) => {
+    setCurrentConfig((prevConfig) => {
+      let newModel = prevConfig.model;
+      if (newWebAccessState) {
+        // If web access is being turned on
+        if (prevConfig.model !== WEBSEARCH_MODEL) {
+          setPreWebSearchModel(prevConfig.model); // Store the current model
+        }
+        newModel = WEBSEARCH_MODEL;
+        setWebSearchWarning(null);
+      } else {
+        // If web access is being turned off
+        newModel = preWebSearchModel || NANO_MODEL; // Restore the previous model, or fallback
+        setPreWebSearchModel(null); // Clear the stored model
+        setWebSearchWarning(null);
+      }
+      const updatedConfig = {
+        ...prevConfig,
+        webAccess: newWebAccessState,
+        model: newModel,
+      };
+      saveConfig(updatedConfig);
+      return updatedConfig;
+    });
+  };
+
+
+
+  // Render warning if set
+  const renderWebSearchWarning = () =>
+    webSearchWarning ? (
+      <Box marginBottom={1}>
+        <Text color="red">{webSearchWarning}</Text>
+      </Box>
+    ) : null;
+
+
   const [cwd, inGitRepo] = useMemo(() => {
     const currentCwd = process.cwd();
     const gitRepoStatus = checkInGit(currentCwd);
@@ -78,6 +129,7 @@ export default function App({
   if (!inGitRepo && !accepted) {
     return (
       <Box flexDirection="column">
+        {renderWebSearchWarning()}
         <Box borderStyle="round" paddingX={1} width={64}>
           <Text>
             ● OpenAI <Text bold>Codex</Text>{" "}
@@ -116,14 +168,18 @@ export default function App({
   }
 
   return (
-    <TerminalChat
-      config={currentConfig} // Pass the stateful config
-      initialPrompt={prompt}
-      imagePaths={imagePaths}
-      approvalPolicy={approvalPolicy}
-      additionalWritableRoots={additionalWritableRoots}
-      fullStdout={fullStdout}
-      onProviderChange={handleProviderChange} // Pass the handler
-    />
+    <Box flexDirection="column">
+      {renderWebSearchWarning()}
+      <TerminalChat
+        config={currentConfig} 
+        initialPrompt={prompt}
+        imagePaths={imagePaths}
+        approvalPolicy={approvalPolicy}
+        additionalWritableRoots={additionalWritableRoots}
+        fullStdout={fullStdout}
+        onProviderChange={handleProviderChange} 
+        onWebAccessChange={handleWebAccessChange} 
+      />
+    </Box>
   );
 }

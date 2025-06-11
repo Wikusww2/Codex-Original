@@ -5,6 +5,7 @@ import type {
   SafetyAssessment,
 } from "../../approvals.js";
 import type { AppConfig } from "../config.js";
+
 import type { ResponseEvent } from "../responses.js";
 import type {
   ResponseFunctionToolCall,
@@ -45,10 +46,16 @@ import {
   OPENAI_PROJECT,
   getBaseUrl,
   AZURE_OPENAI_API_VERSION,
+  DEFAULT_APPROVAL_MODE,
+  DEFAULT_REASONING_EFFORT,
+  DEFAULT_SHELL_MAX_BYTES,
+  DEFAULT_SHELL_MAX_LINES,
 } from "../config.js";
 import { log } from "../logger/log.js";
 import { parseToolCallArguments } from "../parsers.js";
+
 import { responsesCreateViaChatCompletions } from "../responses.js";
+
 import {
   ORIGIN,
   getSessionId,
@@ -63,6 +70,33 @@ import { randomUUID } from "node:crypto";
 import OpenAI, { APIConnectionTimeoutError, AzureOpenAI } from "openai";
 import os from "os";
 
+const shellFunctionTool: FunctionTool = {
+  type: "function",
+  name: "shell",
+  description: "Runs a shell command, and returns its output.",
+  strict: false,
+  parameters: {
+    type: "object",
+    properties: {
+      command: { type: "array", items: { type: "string" } },
+      workdir: {
+        type: "string",
+        description: "The working directory for the command.",
+      },
+      timeout: {
+        type: "number",
+        description:
+          "The maximum time to wait for the command to complete in milliseconds.",
+      },
+    },
+    required: ["command"],
+    additionalProperties: false,
+  },
+};
+
+const localShellTool: LocalShellTool = {
+  type: "local_shell",
+};
 // Wait time before retrying after rate limit errors (ms).
 const RATE_LIMIT_RETRY_WAIT_MS = parseInt(
   process.env["OPENAI_RATE_LIMIT_RETRY_WAIT_MS"] || "500",
@@ -112,34 +146,6 @@ export type AgentLoopParams = {
 
   /** Called when the working directory changes. */
   onWorkdirChanged?: (newWorkdir: string) => void;
-};
-
-const shellFunctionTool: FunctionTool = {
-  type: "function",
-  name: "shell",
-  description: "Runs a shell command, and returns its output.",
-  strict: false,
-  parameters: {
-    type: "object",
-    properties: {
-      command: { type: "array", items: { type: "string" } },
-      workdir: {
-        type: "string",
-        description: "The working directory for the command.",
-      },
-      timeout: {
-        type: "number",
-        description:
-          "The maximum time to wait for the command to complete in milliseconds.",
-      },
-    },
-    required: ["command"],
-    additionalProperties: false,
-  },
-};
-
-const localShellTool: LocalShellTool = {
-  type: "local_shell",
 };
 
 export class AgentLoop {
@@ -257,14 +263,6 @@ export class AgentLoop {
     //   id: `cancel-${Date.now()}`,
     //   type: "message",
     //   role: "system",
-    //   content: [
-    //     {
-    //       type: "input_text",
-    //       text: "⏹️  Execution canceled by user.",
-    //     },
-    //   ],
-    // };
-    // this.onItem(cancelNotice);
 
     this.generation += 1;
     log(`AgentLoop.cancel(): generation bumped to ${this.generation}`);
@@ -322,10 +320,27 @@ export class AgentLoop {
     // defined object.  We purposefully copy over the `model` and
     // `instructions` that have already been passed explicitly so that
     // downstream consumers (e.g. telemetry) still observe the correct values.
-    this.config = config ?? {
-      model,
-      instructions: instructions ?? "",
-    };
+    this.config =
+      config ?? {
+        model,
+        instructions: instructions ?? "",
+        approvalMode: DEFAULT_APPROVAL_MODE,
+        reasoningEffort: DEFAULT_REASONING_EFFORT,
+        notify: false,
+        webAccess: false,
+        webModel: "gpt-4o-search-preview",
+        history: {
+          maxSize: 0,
+          saveHistory: false,
+          sensitivePatterns: [],
+        },
+        tools: {
+          shell: {
+            maxBytes: DEFAULT_SHELL_MAX_BYTES,
+            maxLines: DEFAULT_SHELL_MAX_LINES,
+          },
+        },
+      };
     this.additionalWritableRoots = additionalWritableRoots;
     this.onItem = onItem;
     this.onLoading = onLoading;
@@ -662,18 +677,32 @@ export class AgentLoop {
       const stripInternalFields = (
         item: ResponseInputItem,
       ): ResponseInputItem => {
+        // Capture original id for logging, if it exists
+        const originalId = typeof item === 'object' && item !== null && 'id' in item && (item as any)['id'] ? String((item as any)['id']) : undefined;
+        const itemType = typeof item === 'object' && item !== null && 'type' in item && (item as any)['type'] ? String((item as any)['type']) : 'unknown';
+
+        if (originalId) {
+          log(`AgentLoop.stripInternalFields: Processing item - Type: ${itemType}, Original ID: ${originalId}`);
+        }
+
         // Clone shallowly and remove fields that are not part of the public
         // schema expected by the OpenAI Responses API.
-        // We shallow‑clone the item so that subsequent mutations (deleting
-        // internal fields) do not affect the original object which may still
-        // be referenced elsewhere (e.g. UI components).
         const clean = { ...item } as Record<string, unknown>;
+        
         delete clean["duration_ms"];
-        // Remove OpenAI-assigned identifiers and transient status so the
-        // backend does not reject items that were never persisted because we
-        // use `store: false`.
-        delete clean["id"];
+        delete clean["id"]; // The primary target for deletion
         delete clean["status"];
+        
+        // Defensive deletions for other possible ID names sometimes used
+        delete clean["message_id"]; 
+        delete clean["msg_id"];
+        delete clean["response_id"];
+
+        // Check if 'id' is still present after deletion attempt
+        if (typeof clean === 'object' && clean !== null && 'id' in clean && clean['id'] && originalId) {
+            log(`AgentLoop.stripInternalFields: WARNING - 'id' field (Original ID: ${originalId}) still present on item of type ${itemType} after deletion attempt. Current ID value: ${clean['id']}`);
+        }
+        
         return clean as unknown as ResponseInputItem;
       };
 
@@ -778,6 +807,11 @@ export class AgentLoop {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 delete (clone as any).duration_ms;
 
+                // Explicitly delete the 'id' if it exists, as these items are from
+                // the API response and will cause duplication if resent.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                delete (clone as any).id;
+
                 this.transcript.push(clone);
               }
             }
@@ -834,17 +868,6 @@ export class AgentLoop {
               .join("\n");
 
             // console.log(`[agent-loop.ts DEBUG CONSOLE] Current this.config.provider: ${this.config.provider}`);
-            const responseCall =
-              !this.config.provider ||
-              this.config.provider?.toLowerCase() === "openai"
-                ? (params: ResponseCreateParams) =>
-                    this.oai.responses.create(params)
-                : (params: ResponseCreateParams) =>
-                    responsesCreateViaChatCompletions(
-                      this.oai,
-                      params as ResponseCreateParams & { stream: true },
-                      this.config,
-                    );
             log(
               `instructions (length ${mergedInstructions.length}): ${mergedInstructions}`,
             );
@@ -860,27 +883,31 @@ export class AgentLoop {
             }
 
             // eslint-disable-next-line no-await-in-loop
-            stream = await responseCall({
-              model: modelForApi,
-              instructions: mergedInstructions,
-              input: turnInput,
-              stream: true,
-              parallel_tool_calls: false,
-              reasoning,
-              ...(this.config.flexMode ? { service_tier: "flex" } : {}),
-              ...(this.disableResponseStorage
-                ? { store: false }
-                : {
-                    store: true,
-                    previous_response_id: lastResponseId || undefined,
-                  }),
-              tools: tools,
-              // Explicitly tell the model it is allowed to pick whatever
-              // tool it deems appropriate.  Omitting this sometimes leads to
-              // the model ignoring the available tools and responding with
-              // plain text instead (resulting in a missing tool‑call).
-              tool_choice: "auto",
-            });
+            stream = await responsesCreateViaChatCompletions(
+              this.oai,
+              {
+                model: modelForApi,
+                instructions: mergedInstructions,
+                input: turnInput,
+                stream: true,
+                parallel_tool_calls: false,
+                reasoning,
+                ...(this.config.flexMode ? { service_tier: "flex" } : {}),
+                ...(this.disableResponseStorage
+                  ? { store: false }
+                  : {
+                      store: true,
+                      previous_response_id: lastResponseId || undefined,
+                    }),
+                tools: tools,
+                // Explicitly tell the model it is allowed to pick whatever
+                // tool it deems appropriate.  Omitting this sometimes leads to
+                // the model ignoring the available tools and responding with
+                // plain text instead (resulting in a missing tool‑call).
+                tool_choice: "auto",
+              },
+              this.config,
+            );
             break;
           } catch (error) {
             const isTimeout = error instanceof APIConnectionTimeoutError;
@@ -929,10 +956,10 @@ export class AgentLoop {
                 role: "system",
                 content: [
                   {
-                    type: "input_text",
+                    type: "text",
                     text: "⚠️  The current request exceeds the maximum context length supported by the chosen model. Please shorten the conversation, run /clear, or switch to a model with a larger context window and try again.",
                   },
-                ],
+                ] as any,
               });
               this.onLoading(false);
               return;
@@ -984,10 +1011,10 @@ export class AgentLoop {
                   role: "system",
                   content: [
                     {
-                      type: "input_text",
+                      type: "text",
                       text: `⚠️  Rate limit reached. Error details: ${errorDetails}. Please try again later.`,
                     },
-                  ],
+                  ] as any,
                 });
 
                 this.onLoading(false);
@@ -1009,7 +1036,7 @@ export class AgentLoop {
                 role: "system",
                 content: [
                   {
-                    type: "input_text",
+                    type: "text",
                     // Surface the request ID when it is present on the error so users
                     // can reference it when contacting support or inspecting logs.
                     text: (() => {
@@ -1039,7 +1066,7 @@ export class AgentLoop {
                       }. Error details: ${errorDetails}. Please verify your settings and try again.`;
                     })(),
                   },
-                ],
+                ] as any,
               });
               this.onLoading(false);
               return;
@@ -1601,8 +1628,8 @@ export class AgentLoop {
 
       // Re‑throw all other errors so upstream handlers can decide what to do.
       throw err;
-    }
-  }
+    } // Closes catch (err) block
+  } // Closes run() method
 
   // Process events in a streaming fashion to improve responsiveness
   private async processEventsWithoutStreaming(
@@ -1619,65 +1646,49 @@ export class AgentLoop {
 
     const turnInput: Array<ResponseInputItem> = [];
 
-    // First emit all non-function call items for immediate display
     for (const item of output) {
-      if (item.type !== "function_call" && item.type !== "local_shell_call") {
-        emitItem(item as ResponseItem);
-      }
-    }
+      // Emit all items to the UI as they come.
+      // The UI layer can decide what to render based on item.type and item.role.
+      emitItem(item as ResponseItem);
 
-    // Then process function calls one by one
-    for (const item of output) {
-      if (item.type === "function_call") {
-        // Skip already processed function calls
-        if (alreadyProcessedResponses.has(item.id)) {
-          continue;
-        }
-
-        // Mark as processed
-        alreadyProcessedResponses.add(item.id);
-
-        // Show the function call in the UI
-        emitItem(item as ResponseItem);
-
-        // Process the function call SYNCHRONOUSLY
-        // eslint-disable-next-line no-await-in-loop
-        const result = await this.handleFunctionCall(item);
-
-        // Add results to turnInput for the next API call
-        turnInput.push(...result);
-
-        // Also show the function output in the UI
-        for (const resultItem of result) {
-          emitItem(resultItem as ResponseItem);
+      if (item.type === "message" && (item.role === "assistant" || (item.role as string) === "tool")) {
+        // Add assistant messages (which might contain tool_calls)
+        // and 'tool' role messages (which are tool outputs from server-side execution
+        // like web_search_preview) to turnInput for the next LLM call.
+        turnInput.push(item);
+      } else if (item.type === "function_call") {
+        // This is a request from the LLM to call a client-side function.
+        // We need to execute it and add its output to turnInput.
+        if (!alreadyProcessedResponses.has(item.id)) {
+          alreadyProcessedResponses.add(item.id);
+          // handleFunctionCall executes the function and returns its output(s).
+          // eslint-disable-next-line no-await-in-loop
+          const result = await this.handleFunctionCall(item);
+          turnInput.push(...result);
+          // Emit the result items (e.g., function_call_output) to UI as well.
+          for (const resultItem of result) {
+            emitItem(resultItem as ResponseItem);
+          }
         }
       } else if (item.type === "local_shell_call") {
-        // Skip already processed shell calls
+        // Similar handling for local_shell_call, which is also client-side executed.
         const shellId = (item as LocalShellCallItem).id;
-        if (shellId && alreadyProcessedResponses.has(shellId)) {
-          continue;
-        }
-
-        // Mark as processed
-        if (shellId) {
+        if (shellId && !alreadyProcessedResponses.has(shellId)) {
           alreadyProcessedResponses.add(shellId);
-        }
-
-        // Show the shell call in the UI
-        emitItem(item as ResponseItem);
-
-        // Process the shell call SYNCHRONOUSLY
-        // eslint-disable-next-line no-await-in-loop
-        const result = await this.handleLocalShellCall(item);
-
-        // Add results to turnInput for the next API call
-        turnInput.push(...result);
-
-        // Also show the shell output in the UI
-        for (const resultItem of result) {
-          emitItem(resultItem as ResponseItem);
+          // eslint-disable-next-line no-await-in-loop
+          const result = await this.handleLocalShellCall(item);
+          turnInput.push(...result);
+          // Emit the result items to UI.
+          for (const resultItem of result) {
+            emitItem(resultItem as ResponseItem);
+          }
         }
       }
+      // Other item types from the 'output' array (e.g., 'reasoning',
+      // 'user'/'system' messages if they were somehow in 'output') are generally
+      // not added back to turnInput by this function. They are either for UI display only,
+      // handled by the specific tool call execution path which generates its own output for turnInput,
+      // or are already part of the established conversation transcript prior to this turn.
     }
     return turnInput;
   }

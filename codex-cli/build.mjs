@@ -56,59 +56,44 @@ const inkResolverPlugin = {
       return { path: path.join(inkBuildPath, "index.js") };
     });
 
-    // Resolve relative paths like './components/Box.js' originating from Ink files
-    build.onResolve({ filter: /^\.\.?\// }, async (args) => {
+    // Resolve relative paths like './components/Box.js' originating from our patched Ink source
+    build.onResolve({ filter: /^\.\.?\// }, (args) => {
       const normImporter = path.normalize(args.importer);
-      const inkBuildRootNodeModules = path.normalize(path.resolve(process.cwd(), 'node_modules/ink/build'));
-      // Use inkBuildPath which is defined in the plugin setup as path.join(inkSourcePath, 'build')
-      // This correctly points to '.ink-source-for-build/build'
-      const inkBuildRootSourceFromPatch = path.normalize(inkBuildPath); 
+      const inkBuildRootSourceFromPatch = path.normalize(inkBuildPath);
 
-      let isImporterAnInkFile = false;
-      let baseResolveDirForRelativeInkImport = null;
-
-      // Scenario 1: Importer is like '.../node_modules/ink/build/index.js'
-      if (normImporter.startsWith(inkBuildRootNodeModules)) {
-        isImporterAnInkFile = true;
-        // Determine the sub-path relative to 'node_modules/ink/build' (e.g., '.' for index.js, or 'components' if importer was '.../node_modules/ink/build/components/SomeComponent.js')
-        const relativeSubPath = path.relative(inkBuildRootNodeModules, path.dirname(normImporter));
-        // The base for resolving args.path should be the corresponding directory in our patched source
-        baseResolveDirForRelativeInkImport = path.join(inkBuildRootSourceFromPatch, relativeSubPath);
-      } 
-      // Scenario 2: Importer is already within our patched source, e.g., '.../.ink-source-for-build/build/ink.js'
-      else if (normImporter.startsWith(inkBuildRootSourceFromPatch)) { 
-        isImporterAnInkFile = true;
-        // Resolve relative to the importer's actual directory within the patched source
-        baseResolveDirForRelativeInkImport = path.dirname(normImporter);
+      // This resolver should only act on files inside the patched ink directory.
+      // If the file doing the importing is not in our patched source, ignore it.
+      if (!normImporter.startsWith(inkBuildRootSourceFromPatch)) {
+        return undefined;
       }
 
-      if (isImporterAnInkFile) {
-        const targetPath = path.resolve(baseResolveDirForRelativeInkImport, args.path);
+      // The importer is within our patched source, so resolve the import relative to it.
+      const baseResolveDir = path.dirname(normImporter);
+      const targetPath = path.resolve(baseResolveDir, args.path);
 
-        const checkAndResolve = (p) => {
-          const pJs = p + '.js';
-          const pMjs = p + '.mjs';
-          if (fs.existsSync(p) && fs.statSync(p).isFile()) return { path: p };
-          if (fs.existsSync(pJs) && fs.statSync(pJs).isFile()) return { path: pJs };
-          if (fs.existsSync(pMjs) && fs.statSync(pMjs).isFile()) return { path: pMjs };
-          // Check for directory with index file (e.g., './components/')
-          if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
-            const pIndexJs = path.join(p, 'index.js');
-            const pIndexMjs = path.join(p, 'index.mjs');
-            if (fs.existsSync(pIndexJs) && fs.statSync(pIndexJs).isFile()) return { path: pIndexJs };
-            if (fs.existsSync(pIndexMjs) && fs.statSync(pIndexMjs).isFile()) return { path: pIndexMjs };
-          }
-          return null;
-        };
-
-        const resolved = checkAndResolve(targetPath);
-        if (resolved) {
-          console.log(`[ink-resolver] Relative: '${args.path}' (from '${args.importer}') -> '${resolved.path}'`);
-          return resolved;
+      // Helper to check for file existence with different extensions, since Ink's source
+      // uses extensionless imports (e.g., import './components/Box').
+      const checkAndResolve = (p) => {
+        const pJs = p + '.js';
+        if (fs.existsSync(p) && fs.statSync(p).isFile()) return { path: p };
+        if (fs.existsSync(pJs) && fs.statSync(pJs).isFile()) return { path: pJs };
+        
+        // Check for directory with index.js file (e.g., './components/')
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+          const pIndexJs = path.join(p, 'index.js');
+          if (fs.existsSync(pIndexJs) && fs.statSync(pIndexJs).isFile()) return { path: pIndexJs };
         }
-        // console.warn(`[ink-resolver] Failed to resolve relative Ink path '${args.path}' from '${args.importer}' against base '${baseResolveDirForRelativeInkImport}' (target: ${targetPath})`);
+        return null;
+      };
+
+      const resolved = checkAndResolve(targetPath);
+      if (resolved) {
+        // console.log(`[ink-resolver] Relative: '${args.path}' (from '${args.importer}') -> '${resolved.path}'`);
+        return resolved;
       }
-      return undefined; // Let esbuild handle other relative imports
+
+      // If we couldn't resolve it, let esbuild try. This might happen for node built-ins etc.
+      return undefined;
     });
   }
 };

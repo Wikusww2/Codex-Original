@@ -146,10 +146,10 @@ export async function handleExecCommand(
           role: "user", // Or system, depending on how you want it to appear
           content: [
             {
-              type: "input_text",
+              type: "text",
               text: `Command rejected: ${assessment.reason}`,
             },
-          ],
+          ] as any,
         },
       ],
     };
@@ -386,7 +386,7 @@ async function askUserPermission(
         {
           type: "message",
           role: "user",
-          content: [{ type: "input_text", text: note }],
+          content: [{ type: "text", text: note }] as any,
         },
       ],
     };

@@ -1,12 +1,18 @@
-export const providers: Record<
-  string,
-  { name: string; baseURL: string; envKey: string; defaultModel: string; }
-> = {
+export type ProviderConfig = {
+  name: string;
+  baseURL: string;
+  envKey: string;
+  defaultModel: string;
+  models?: string[]; // Optional list of available models
+};
+
+export const providers: Record<string, ProviderConfig> = {
   openai: {
     name: "OpenAI",
     baseURL: "https://api.openai.com/v1",
     envKey: "OPENAI_API_KEY",
-    defaultModel: "gpt-4.1-nano",
+    defaultModel: "gpt-4.1",
+    models: ["gpt-4.1", "gpt-4.1-nano", "gpt-4-turbo", "gpt-4o", "gpt-3.5-turbo"],
   },
   openrouter: {
     name: "OpenRouter",

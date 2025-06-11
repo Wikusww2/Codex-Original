@@ -3,10 +3,12 @@ export type ModelInfo = {
   label: string;
   /** The max context window size for this model */
   maxContextLength: number;
+  /** Whether this model uses web_search_options for web search */
+  usesWebSearchOptions?: boolean;
 };
 
 export type SupportedModelId = keyof typeof openAiModelInfo;
-export const openAiModelInfo = {
+export const openAiModelInfo: Record<string, ModelInfo> = {
   "o1-pro-2025-03-19": {
     label: "o1 Pro (2025-03-19)",
     maxContextLength: 200000,
@@ -27,14 +29,7 @@ export const openAiModelInfo = {
     label: "o4 Mini",
     maxContextLength: 200000,
   },
-  "gpt-4.1-nano": {
-    label: "GPT-4.1 Nano",
-    maxContextLength: 1000000,
-  },
-  "gpt-4.1-nano-2025-04-14": {
-    label: "GPT-4.1 Nano (2025-04-14)",
-    maxContextLength: 1000000,
-  },
+
   "o4-mini-2025-04-16": {
     label: "o4 Mini (2025-04-16)",
     maxContextLength: 200000,
@@ -58,6 +53,7 @@ export const openAiModelInfo = {
   "gpt-4o-mini-search-preview": {
     label: "GPT-4o Mini Search Preview",
     maxContextLength: 128000,
+    usesWebSearchOptions: true,
   },
   "gpt-4.1-mini-2025-04-14": {
     label: "GPT-4.1 Mini (2025-04-14)",
@@ -74,6 +70,7 @@ export const openAiModelInfo = {
   "gpt-4o-search-preview": {
     label: "GPT-4o Search Preview",
     maxContextLength: 128000,
+    usesWebSearchOptions: true,
   },
   "gpt-4-turbo": {
     label: "GPT-4 Turbo",
@@ -98,6 +95,7 @@ export const openAiModelInfo = {
   "gpt-4o-mini-search-preview-2025-03-11": {
     label: "GPT-4o Mini Search Preview (2025-03-11)",
     maxContextLength: 128000,
+    usesWebSearchOptions: true,
   },
   "gpt-4-0125-preview": {
     label: "GPT-4 (0125) Preview",
@@ -158,6 +156,7 @@ export const openAiModelInfo = {
   "gpt-4o-search-preview-2025-03-11": {
     label: "GPT-4o Search Preview (2025-03-11)",
     maxContextLength: 128000,
+    usesWebSearchOptions: true,
   },
   "gpt-4o": {
     label: "GPT-4o",

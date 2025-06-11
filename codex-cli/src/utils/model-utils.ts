@@ -2,7 +2,8 @@ import type { ResponseItem } from "openai/resources/responses/responses.mjs";
 
 import { approximateTokensUsed } from "./approximate-tokens-used.js";
 import { getApiKey } from "./config.js";
-import { type SupportedModelId, openAiModelInfo } from "./model-info.js";
+import { providers, type ProviderConfig } from "./providers.js"; // Added import
+import { openAiModelInfo } from "./model-info.js";
 import { createOpenAIClient } from "./openai-client.js";
 
 const MODEL_LIST_TIMEOUT_MS = 2_000; // 2 seconds
@@ -56,7 +57,13 @@ async function fetchModels(provider: string): Promise<Array<string>> {
 export async function getAvailableModels(
   provider: string,
 ): Promise<Array<string>> {
-  return fetchModels(provider.toLowerCase());
+  const providerKey = provider.toLowerCase();
+  const providerConfig = providers[providerKey] as ProviderConfig | undefined;
+
+  if (providerConfig?.models && providerConfig.models.length > 0) {
+    return Promise.resolve(providerConfig.models.sort());
+  }
+  return fetchModels(providerKey);
 }
 
 /**
@@ -98,8 +105,9 @@ export async function isModelSupportedForResponses(
 
 /** Returns the maximum context length (in tokens) for a given model. */
 export function maxTokensForModel(model: string): number {
-  if (model in openAiModelInfo) {
-    return openAiModelInfo[model as SupportedModelId].maxContextLength;
+  const modelData = openAiModelInfo[model];
+  if (modelData) {
+    return modelData.maxContextLength;
   }
 
   // fallback to heuristics for models not in the registry

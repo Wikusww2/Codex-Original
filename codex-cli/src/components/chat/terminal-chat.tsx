@@ -1,8 +1,7 @@
-
 // Type Imports
 import type { TerminalHeaderProps } from "./terminal-header.js";
 import type { BatchEntry } from "./terminal-message-history.js";
-import type { AppRollout } from "../../app.js";
+
 import type {
   ApprovalPolicy,
   ApplyPatchCommand,
@@ -16,7 +15,6 @@ import type {
   ResponseInputItem,
   ResponseFunctionToolCall,
 } from "openai/resources/responses/responses.mjs";
-
 
 // Codegen utils and core logic
 
@@ -38,7 +36,6 @@ import { AgentLoop } from "../../utils/agent/agent-loop.js";
 import { ReviewDecision } from "../../utils/agent/review.js";
 import { AutoApprovalMode } from "../../utils/auto-approval-mode.js";
 import { generateCompactSummary } from "../../utils/compact-summary.js";
-import { saveConfig } from "../../utils/config.js";
 import { log } from "../../utils/logger/log.js";
 import {
   uniqueById,
@@ -50,11 +47,12 @@ import DiffOverlay from "../diff-overlay.js";
 import HelpOverlay from "../help-overlay.js";
 import HistoryOverlay from "../history-overlay.js";
 import ModelOverlay from "../model-overlay.js";
-import SessionsOverlay from "../sessions-overlay.js";
+
 import WebAccessOverlay from "../web-access-overlay.js";
 import chalk from "chalk";
-import fs from "fs/promises";
+
 import { Box, useStdout } from "ink";
+import type { TerminalChatSession } from "../../utils/session.js";
 import { spawn } from "node:child_process";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { inspect } from "util";
@@ -80,20 +78,21 @@ export type Props = {
   additionalWritableRoots: ReadonlyArray<string>;
   fullStdout: boolean;
   onProviderChange: (newProviderName: string, selectedModel?: string) => void;
+  onWebAccessChange: (newWebAccessState: boolean) => void;
 };
 
 /**
  * Generates an explanation for a shell command using the OpenAI API.
  *
  * @param command The command to explain
- * @param model The model to use for generating the explanation
+ * @param config.model The config.model to use for generating the explanation
  * @param flexMode Whether to use the flex-mode service tier
  * @param config The configuration object
  * @returns A human-readable explanation of what the command does
  */
 async function generateCommandExplanation(
   command: Array<string>,
-  model: string,
+
   flexMode: boolean,
   config: AppConfig,
 ): Promise<string> {
@@ -106,7 +105,7 @@ async function generateCommandExplanation(
 
     // Create a prompt that asks for an explanation with a more detailed system prompt
     const response = await oai.chat.completions.create({
-      model,
+      model: config.model,
       ...(flexMode ? { service_tier: "flex" } : {}),
       messages: [
         {
@@ -160,20 +159,14 @@ export const TerminalChat: React.FC<Props> = ({
   additionalWritableRoots,
   fullStdout,
   onProviderChange, // Destructure the new prop
+  onWebAccessChange, // Destructure the new prop
 }: Props): React.ReactElement => {
-  useEffect(() => {
-    // Synchronize local state with prop changes from App.tsx
-    setProvider(config.provider || "openai"); // Fallback for provider
-    setModel(config.model || "gpt-4-turbo");    // Fallback for model
-  }, [config.provider, config.model, approvalPolicy]);
-
+  // Always use config.model and config.provider directly—no local state for these
   const notify = Boolean(config.notify);
-  const [model, setModel] = useState<string>(config.model || "gpt-4-turbo");
-  const [provider, setProvider] = useState<string>(config.provider || "openai");
   const [lastResponseId, setLastResponseId] = useState<string | null>(null);
   const [items, setItems] = useState<Array<ResponseItem>>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [webAccess, setWebAccess] = useState<boolean>(config.webAccess ?? false);
+  // const [webAccess, setWebAccess] = useState<boolean>(config.webAccess ?? false); // Removed local state
 
   const [, forceRender] = useState(0);
   const forceUpdate = () => forceRender((c) => c + 1);
@@ -201,7 +194,7 @@ export const TerminalChat: React.FC<Props> = ({
     try {
       const summary = await generateCompactSummary(
         items,
-        model,
+        config.model,
         Boolean(config.flexMode),
         config,
       );
@@ -221,8 +214,8 @@ export const TerminalChat: React.FC<Props> = ({
           type: "message",
           role: "system",
           content: [
-            { type: "input_text", text: `Failed to compact context: ${err}` },
-          ],
+            { type: "text", text: `Failed to compact context: ${err}` },
+          ] as any,
         } as ResponseItem,
       ]);
     } finally {
@@ -264,7 +257,7 @@ export const TerminalChat: React.FC<Props> = ({
   };
 
   const [overlayMode, setOverlayMode] = useState<OverlayModeType>("none");
-  const [viewRollout, setViewRollout] = useState<AppRollout | null>(null);
+  const [viewRollout] = useState(false);
 
   const [diffText, _setDiffText] = useState<string>("");
 
@@ -295,11 +288,11 @@ export const TerminalChat: React.FC<Props> = ({
     }
 
     log(
-      `TerminalChat: Initializing AgentLoop with approvalPolicy: ${approvalPolicy}, model: ${model}, provider: ${provider}`,
+      `TerminalChat: Initializing AgentLoop with approvalPolicy: ${approvalPolicy}, config.model: ${config.model}, config.provider: ${config.provider}`,
     );
     agentRef.current = new AgentLoop({
-      model: model,
-      provider: provider,
+      model: config.model,
+      provider: config.provider,
       config: config,
       instructions: config.instructions,
       approvalPolicy: approvalPolicy,
@@ -346,7 +339,6 @@ export const TerminalChat: React.FC<Props> = ({
 
         const explanationText = await generateCommandExplanation(
           commandForConfirmation,
-          model,
           config.flexMode ?? false,
           config,
         );
@@ -398,8 +390,8 @@ export const TerminalChat: React.FC<Props> = ({
       forceUpdate();
     };
   }, [
-    model,
-    provider,
+    config.model,
+    config.provider,
     config,
     requestConfirmation,
     additionalWritableRoots,
@@ -486,14 +478,14 @@ export const TerminalChat: React.FC<Props> = ({
     terminalRows: terminalRowsFromHook || 24,
     version: (pkg as PkgInfo).version,
     PWD: workdir || process.cwd(),
-    model: model,
-    provider: provider,
+    model: config.model, // Always use up-to-date model from config
+    provider: config.provider, // Always use up-to-date provider from config
     approvalPolicy: approvalPolicy,
     colorsByPolicy: colorsByPolicy,
     agent: agentRef.current ?? undefined,
     initialImagePaths: currentImagePaths, // Use renamed state variable for header
     flexModeEnabled: config.flexMode,
-    webAccessEnabled: webAccess,
+    webAccessEnabled: config.webAccess ?? false, // Use directly from config
     workdir: workdir,
   };
 
@@ -553,14 +545,17 @@ export const TerminalChat: React.FC<Props> = ({
     })();
     // run once on mount
      
-  }, [provider, model]);
+  }, [config.provider, config.model]);
+
+  const isWebMode = config.webAccess && config.model === "gpt-4o-search-preview";
+  const isNanoMode = !config.webAccess && config.model === "gpt-4.1-nano";
 
   if (viewRollout) {
     return (
       <TerminalChatPastRollout
         fileOpener={config.fileOpener}
-        session={viewRollout.session}
-        items={viewRollout.items}
+        session={{} as TerminalChatSession}
+        items={[] as ResponseItem[]}
       />
     );
   }
@@ -597,6 +592,7 @@ export const TerminalChat: React.FC<Props> = ({
           openOverlay={() => setOverlayMode("help")}
           openModelOverlay={() => setOverlayMode("model")}
           openProviderOverlay={() => setOverlayMode("provider")}
+
           openApprovalOverlay={() => setOverlayMode("approval")}
           openHelpOverlay={() => setOverlayMode("help")}
           openDiffOverlay={() => setOverlayMode("diff")}
@@ -605,6 +601,29 @@ export const TerminalChat: React.FC<Props> = ({
           onCompact={handleCompact}
           items={safeItems}
           workdir={workdir}
+          webAccessMode={isWebMode || isNanoMode}
+          onWebAccessToggle={() => {
+            // Toggle web access and update config/config.model
+            const newWebAccess = !(config.webAccess ?? false);
+            onWebAccessChange(newWebAccess);
+            setItems((prev) => [
+              ...prev,
+              {
+                id: `web-toggle-${Date.now()}`,
+                type: "message",
+                role: "assistant",
+                status: "completed",
+                content: [
+                  {
+                    type: "output_text",
+                    text: `\ud83c\udf10 Web access ${newWebAccess ? "enabled" : "disabled"}. Model switched to ${config.model}.`,
+                    annotations: [], // <-- Fix: add required property
+                  },
+                ],
+              },
+            ]);
+          }}
+          webSearching={Boolean(config.webAccess && loading)}
         />
       </Box>
 
@@ -614,85 +633,15 @@ export const TerminalChat: React.FC<Props> = ({
           onExit={() => setOverlayMode("none")}
         />
       )}
-      {overlayMode === "sessions" && (
-        <SessionsOverlay
-          onView={async (p) => {
-            try {
-              const txt = await fs.readFile(p, "utf-8");
-              const data = JSON.parse(txt) as AppRollout;
-              setViewRollout(data);
-              setOverlayMode("none");
-            } catch {
-              setOverlayMode("none");
-            }
-          }}
-          onResume={(p) => {
-            setOverlayMode("none");
-            setInitialPromptFromProps(`Resume this session: ${p}`);
-          }}
-          onExit={() => setOverlayMode("none")}
-        />
-      )}
-      {overlayMode === "model" && (
+      {overlayMode === "provider" && (
         <ModelOverlay
-          currentModel={model}
+          currentModel={config.model}
           providers={config.providers}
-          currentProvider={provider}
+          currentProvider={config.provider}
           hasLastResponse={Boolean(lastResponseId)}
-          onSelect={(allModels, newModel) => {
-            log(
-              "TerminalChat: interruptAgent invoked – calling agent.cancel()",
-            );
-            if (!agentRef.current) {
-              log("TerminalChat: agent is not ready yet");
-            }
-            agentRef.current?.cancel();
-            setLoading(false);
-
-            if (!allModels?.includes(newModel)) {
-              // eslint-disable-next-line no-console
-              console.error(
-                chalk.bold.red(
-                  `Model "${chalk.yellow(
-                    newModel,
-                  )}" is not available for provider "${chalk.yellow(
-                    provider,
-                  )}".`,
-                ),
-              );
-              return;
-            }
-
-            setModel(newModel); // Local model state update for model-only changes
-            setLastResponseId((prev) =>
-              prev && newModel !== model ? null : prev,
-            );
-
-            // For model-only changes, App.tsx is not updated via onProviderChange.
-            // The config is saved directly. Consider if App.tsx needs a handleModelChange.
-            saveConfig({
-              ...config,
-              model: newModel, // provider remains config.provider (which is from App.tsx state)
-            });
-
-            setItems((prev) => [
-              ...prev,
-              {
-                id: `switch-model-${Date.now()}`,
-                type: "message",
-                role: "system",
-                content: [
-                  {
-                    type: "input_text",
-                    text: `Switched model to ${newModel}`,
-                  },
-                ],
-              },
-            ]);
-
-            setOverlayMode("none");
-          }}
-          onSelectProvider={(newProviderName) => {
+          startMode="provider"
+          onSelect={() => {}}
+          onSelectProvider={(newProviderName: string) => {
             log("TerminalChat: onSelectProvider called for new provider: " + newProviderName);
             agentRef.current?.cancel(); 
             setLoading(false);
@@ -700,7 +649,7 @@ export const TerminalChat: React.FC<Props> = ({
 
             const defaultModelForNewProvider = config.providers?.[newProviderName]?.defaultModel || "(default will be set)";
             setLastResponseId((prevLastResponseId) => {
-              if (newProviderName !== provider) { 
+              if (newProviderName !== config.provider) { 
                 log("TerminalChat: Provider changed, resetting lastResponseId.");
                 return null;
               }
@@ -725,13 +674,12 @@ export const TerminalChat: React.FC<Props> = ({
           onExit={() => setOverlayMode("none")}
         />
       )}
-      {overlayMode === "provider" && (
+      {overlayMode === "model" && !isWebMode && !isNanoMode && (
         <ModelOverlay
-          currentModel={model}
+          currentModel={config.model}
           providers={config.providers}
-          currentProvider={provider}
+          currentProvider={config.provider}
           hasLastResponse={Boolean(lastResponseId)}
-          startMode="provider"
           onSelect={(allModels, newModel) => {
             log(
               "TerminalChat: interruptAgent invoked – calling agent.cancel()",
@@ -749,32 +697,13 @@ export const TerminalChat: React.FC<Props> = ({
                   `Model "${chalk.yellow(
                     newModel,
                   )}" is not available for provider "${chalk.yellow(
-                    provider, // This 'provider' is TerminalChat's local state, which should be in sync with App.tsx via props
+                    config.provider,
                   )}".`,
                 ),
               );
               return;
             }
-            // When startMode is 'provider', onSelect is called AFTER onSelectProvider.
-            // The provider has already been set in App.tsx's state via onProviderChange.
-            // Now we are setting the model for that new provider.
-            // App.tsx's currentConfig needs to be updated with this new model.
-            // We should call onProviderChange again, or have a dedicated onModelChange in App.tsx.
-            // For now, to ensure App.tsx has the model, we call onProviderChange with the *current* provider (from App.tsx state)
-            // and the new model. This is a bit of a workaround.
-            // A cleaner way would be: App.tsx.handleProviderChange(newProvider, newModel)
-            // or App.tsx.handleModelChange(newModel)
-            if (config.provider) {
-              onProviderChange(config.provider); // This will re-run App.tsx's handleProviderChange
-            } else {
-              // eslint-disable-next-line no-console
-              console.error('[TerminalChat] Attempted to call onProviderChange without a valid config.provider when setting model.');
-            }
-                                            // It will use current config.provider, but update model to newModel if we pass it.
-                                            // Let's adjust App.tsx's handleProviderChange to accept an optional newModel.
-                                            // For now, this call will just re-affirm the provider and its default model.
-                                            // The user selected 'newModel', so we need to ensure THAT is set.
-            
+
             // Notify App.tsx to update its state with the new model for the current provider.
             // App.tsx's handleProviderChange will set this model.
             // The local 'model' state in TerminalChat will be updated via the useEffect hook listening to props.config changes.
@@ -782,7 +711,7 @@ export const TerminalChat: React.FC<Props> = ({
               onProviderChange(config.provider, newModel);
             } else {
               // eslint-disable-next-line no-console
-              console.error('[TerminalChat] Attempted to call onProviderChange with newModel but without a valid config.provider.');
+              console.error('[TerminalChat] Attempted to call onProviderChange with newModel but without a valid provider.');
             }
 
             setItems((prev) => [
@@ -802,40 +731,9 @@ export const TerminalChat: React.FC<Props> = ({
 
             setOverlayMode("none");
           }}
-          onSelectProvider={(newProviderName) => {
-            log("TerminalChat: onSelectProvider called for new provider: " + newProviderName);
-            agentRef.current?.cancel(); 
-            setLoading(false);
-            onProviderChange(newProviderName); // Notify App.tsx
-
-            const defaultModelForNewProvider = config.providers?.[newProviderName]?.defaultModel || "(default will be set)";
-            setLastResponseId((prevLastResponseId) => {
-              if (newProviderName !== provider) { 
-                log("TerminalChat: Provider changed, resetting lastResponseId.");
-                return null;
-              }
-              return prevLastResponseId;
-            });
-            setItems((prevItems) => [
-              ...prevItems,
-              {
-                id: `switch-provider-${Date.now()}`,
-                type: "message",
-                role: "system",
-                content: [
-                  {
-                    type: "input_text",
-                    text: `Switched provider to ${newProviderName}. ${defaultModelForNewProvider !== "(default will be set)" ? `Model set to '${defaultModelForNewProvider}'.` : "Please select a model."}`,
-                  },
-                ],
-              } as ResponseItem, 
-            ]);
-            log("TerminalChat: System message added for provider switch.");
-          }}
           onExit={() => setOverlayMode("none")}
         />
       )}
-
       {overlayMode === "approval" && (
         <ApprovalModeOverlay
           currentMode={approvalPolicy}
@@ -851,10 +749,26 @@ export const TerminalChat: React.FC<Props> = ({
 
       {overlayMode === "web" && (
         <WebAccessOverlay
-          enabled={webAccess}
-          onToggle={(val) => {
-            setWebAccess(val);
-            saveConfig({ ...config, webAccess: val });
+          enabled={config.webAccess ?? false}
+          onToggle={(newValue) => {
+            onWebAccessChange(newValue);
+            setItems((prev) => [
+              ...prev,
+              {
+                id: `web-toggle-${Date.now()}`,
+                type: "message",
+                role: "system",
+                content: [
+                  {
+                    type: "input_text",
+                    text: newValue
+                      ? "🌐 Web access enabled. Model switched to gpt-4o-search-preview."
+                      : "🚫 Web access disabled. Model switched to gpt-4.1-nano.",
+                  },
+                ],
+              },
+            ]);
+            setOverlayMode("none");
           }}
           onExit={() => setOverlayMode("none")}
         />

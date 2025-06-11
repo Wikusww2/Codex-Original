@@ -7,10 +7,10 @@
 // `./auto-approval-mode.js`, so the change is completely transparent for the
 // compiled `dist/` output used by the published CLI.
 
-import type { FullAutoErrorMode } from "./auto-approval-mode";
+
 import type { ReasoningEffort } from "openai/resources.mjs";
 
-import { AutoApprovalMode } from "./auto-approval-mode";
+import { AutoApprovalMode, FullAutoErrorMode } from "./auto-approval-mode.js";
 import { log } from "./logger/log.js";
 import { providers } from "./providers.js";
 import { config as loadDotenv } from "dotenv";
@@ -44,9 +44,10 @@ if (!isVitest) {
   loadDotenv({ path: USER_WIDE_CONFIG_PATH });
 }
 
-export const DEFAULT_AGENTIC_MODEL = "gpt-4.1-nano";
+export const DEFAULT_AGENTIC_MODEL = "gpt-4.1";
 export const DEFAULT_FULL_CONTEXT_MODEL = "gpt-4.1";
 export const DEFAULT_APPROVAL_MODE = AutoApprovalMode.NONE;
+export const DEFAULT_REASONING_EFFORT: ReasoningEffort = "low";
 export const DEFAULT_INSTRUCTIONS = "";
 
 // Default shell output limits
@@ -72,8 +73,6 @@ export let OPENAI_API_KEY = process.env["OPENAI_API_KEY"] || "";
 
 export const AZURE_OPENAI_API_VERSION =
   process.env["AZURE_OPENAI_API_VERSION"] || "2025-03-01-preview";
-
-export const DEFAULT_REASONING_EFFORT = "high";
 export const OPENAI_ORGANIZATION = process.env["OPENAI_ORGANIZATION"] || "";
 export const OPENAI_PROJECT = process.env["OPENAI_PROJECT"] || "";
 
@@ -186,8 +185,24 @@ export function getApiKey(provider: string = "openai"): string | undefined {
 
 export type FileOpenerScheme = "vscode" | "cursor" | "windsurf";
 
+// In-memory assistant memory config
+export type MemoryConfig = {
+  enabled: boolean;
+};
+
 // Represents config as persisted in config.json.
 export interface StoredConfig {
+  /**
+   * Web search location and context options (OpenAI web search models only)
+   */
+  user_location?: {
+    country?: string;
+    city?: string;
+    region?: string;
+    timezone?: string;
+  };
+  search_context_size?: "low" | "medium" | "high";
+
   providerApiKeys?: { [key: string]: string };
   model?: string;
   provider?: string;
@@ -201,6 +216,7 @@ export interface StoredConfig {
   flexMode?: boolean;
   /** Enable web search capabilities */
   webAccess?: boolean;
+  webModel?: string;
   providers?: Record<string, { name: string; baseURL: string; envKey: string; defaultModel?: string; }>;
   history?: {
     maxSize?: number;
@@ -216,6 +232,7 @@ export interface StoredConfig {
   /** User-defined safe commands */
   safeCommands?: Array<string>;
   reasoningEffort?: ReasoningEffort;
+  max_tokens?: number;
 
   /**
    * URI-based file opener. This is used when linking code references in
@@ -227,50 +244,59 @@ export interface StoredConfig {
 // Minimal config written on first run.  An *empty* model string ensures that
 // we always fall back to DEFAULT_MODEL on load, so updates to the default keep
 // propagating to existing users until they explicitly set a model.
-export const EMPTY_STORED_CONFIG: StoredConfig = { model: "" };
+export const EMPTY_STORED_CONFIG: StoredConfig = { model: "", user_location: undefined, search_context_size: undefined };
 
 // Pre‑stringified JSON variant so we don't stringify repeatedly.
 const EMPTY_CONFIG_JSON = JSON.stringify(EMPTY_STORED_CONFIG, null, 2) + "\n";
 
-export type MemoryConfig = {
-  enabled: boolean;
-};
-
 // Represents full runtime config, including loaded instructions.
-export type AppConfig = {
+export interface AppConfig {
+  /**
+   * Web search location and context options (OpenAI web search models only)
+   */
+  user_location?: {
+    country?: string;
+    city?: string;
+    region?: string;
+    timezone?: string;
+  };
+  search_context_size?: "low" | "medium" | "high";
+
   providerApiKeys?: { [key: string]: string };
   apiKey?: string;
   model: string;
   provider?: string;
   instructions: string;
-  approvalMode?: AutoApprovalMode;
+  approvalMode: AutoApprovalMode;
   fullAutoErrorMode?: FullAutoErrorMode;
   memory?: MemoryConfig;
-  reasoningEffort?: ReasoningEffort;
+  reasoningEffort: ReasoningEffort;
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
   /** Whether to enable desktop notifications for responses */
-  notify?: boolean;
-
+  notify: boolean;
   /** Disable server-side response storage (send full transcript each request) */
   disableResponseStorage?: boolean;
-
   /** Enable the "flex-mode" processing mode for supported models (o3, o4-mini) */
   flexMode?: boolean;
   /** Enable web search capabilities */
-  webAccess?: boolean;
+  webAccess: boolean;
+  webModel: string;
   providers?: Record<string, { name: string; baseURL: string; envKey: string; defaultModel: string }>;
-  history?: {
+  history: {
     maxSize: number;
     saveHistory: boolean;
     sensitivePatterns: Array<string>;
   };
-  tools?: {
-    shell?: {
+  tools: {
+    shell: {
       maxBytes: number;
       maxLines: number;
     };
   };
   fileOpener?: FileOpenerScheme;
-};
+}
 
 // Formatting (quiet mode-only).
 export const PRETTY_PRINT = Boolean(process.env["PRETTY_PRINT"] || "");
@@ -483,7 +509,9 @@ export const loadConfig = (
     provider: storedConfig.provider,
     instructions: combinedInstructions,
     notify: storedConfig.notify === true,
-    approvalMode: storedConfig.approvalMode,
+    approvalMode: storedConfig.approvalMode ?? DEFAULT_APPROVAL_MODE,
+    webAccess: storedConfig.webAccess ?? false,
+    webModel: storedConfig.webModel ?? "gpt-4o-search-preview",
     tools: {
       shell: {
         maxBytes:
@@ -493,8 +521,13 @@ export const loadConfig = (
       },
     },
     disableResponseStorage: storedConfig.disableResponseStorage === true,
-    reasoningEffort: storedConfig.reasoningEffort,
+    reasoningEffort: storedConfig.reasoningEffort ?? DEFAULT_REASONING_EFFORT,
     fileOpener: storedConfig.fileOpener,
+    history: {
+      maxSize: storedConfig.history?.maxSize ?? 100,
+      saveHistory: storedConfig.history?.saveHistory ?? true,
+      sensitivePatterns: storedConfig.history?.sensitivePatterns ?? [],
+    },
   };
 
   // -----------------------------------------------------------------------
@@ -617,6 +650,30 @@ export const loadConfig = (
     }
   }
   config.providers = finalProviders;
+
+  // --- ENFORCE WEB SEARCH MODEL INVARIANT (BIDIRECTIONAL) ---
+  const unsupportedModels = ["gpt-4.1-2025-04-14"];
+  const supportedModelFallback = "gpt-4.1";
+  const nanoModel = "gpt-4.1";
+  if (config.webAccess) {
+    if (unsupportedModels.includes(config.model)) {
+      config.model = supportedModelFallback;
+    }
+  } else {
+    config.model = nanoModel;
+  }
+
+  // DEBUG: Print config state for troubleshooting
+  // eslint-disable-next-line no-console
+  console.log(`[DEBUG loadConfig] model=${config.model}, webAccess=${config.webAccess}, provider=${config.provider}`);
+
+  // Persist corrected config to disk to keep file and memory in sync
+  try {
+    saveConfig(config);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[DEBUG loadConfig] Failed to save config:', e);
+  }
 
   return config;
 };

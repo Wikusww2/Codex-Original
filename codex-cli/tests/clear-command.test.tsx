@@ -55,6 +55,7 @@ describe("/clear command", () => {
       openHelpOverlay: () => {},
       openDiffOverlay: () => {},
       openSessionsOverlay: () => {},
+      openWebOverlay: vi.fn(), // Added to satisfy TS2741
       onCompact: () => {},
       items: existingItems,
     };
@@ -65,8 +66,8 @@ describe("/clear command", () => {
 
     await flush();
 
-    await type(stdin, "/clear", flush);
-    await type(stdin, "\r", flush); // press Enter
+    await type(stdin as any, "/clear", flush);
+    await type(stdin as any, "\r", flush); // press Enter
 
     // Allow any asynchronous state updates to propagate
     await flush();
