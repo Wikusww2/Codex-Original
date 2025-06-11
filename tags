@@ -1,0 +1,71 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+JSONRPC_VERSION	codex-rs/mcp-types/generate_mcp_types.py	/^JSONRPC_VERSION = "2.0"$/;"	v
+RustProp	codex-rs/mcp-types/generate_mcp_types.py	/^class RustProp:$/;"	c
+SCHEMA_VERSION	codex-rs/mcp-types/generate_mcp_types.py	/^SCHEMA_VERSION = "2025-03-26"$/;"	v
+STANDARD_DERIVE	codex-rs/mcp-types/generate_mcp_types.py	/^STANDARD_DERIVE = "#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]\\n"$/;"	v
+StructField	codex-rs/mcp-types/generate_mcp_types.py	/^class StructField:$/;"	c
+_lazy_import_openai	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def _lazy_import_openai():  # noqa: D401$/;"	f
+_lazy_import_sklearn_cluster	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def _lazy_import_sklearn_cluster():$/;"	f
+add_definition	codex-rs/mcp-types/generate_mcp_types.py	/^def add_definition(name: str, definition: dict[str, Any], out: list[str]) -> None:$/;"	f
+add_trait_impl	codex-rs/mcp-types/generate_mcp_types.py	/^def add_trait_impl($/;"	f
+allowed_unicode_codepoints	scripts/asciicheck.py	/^allowed_unicode_codepoints = {$/;"	v
+append	codex-rs/mcp-types/generate_mcp_types.py	/^    def append(self, out: list[str], supports_const: bool) -> None:$/;"	m	class:StructField
+capitalize	codex-rs/mcp-types/generate_mcp_types.py	/^def capitalize(name: str) -> str:$/;"	f
+check_or_fix	scripts/readme_toc.py	/^def check_or_fix(readme_path: Path, fix: bool) -> int:$/;"	f
+check_string_list	codex-rs/mcp-types/generate_mcp_types.py	/^def check_string_list(value: Any) -> list[str] | None:$/;"	f
+cleanup	codex-cli/scripts/run_in_container.sh	/^cleanup() {$/;"	f
+cluster_dbscan	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def cluster_dbscan(matrix: np.ndarray, min_samples: int) -> np.ndarray:$/;"	f
+cluster_kmeans	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def cluster_kmeans(matrix: np.ndarray, k_max: int) -> np.ndarray:$/;"	f
+create_plots	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def create_plots($/;"	f
+cwd	codex-rs/mcp-types/generate_mcp_types.py	/^        cwd=lib_rs.parent.parent,$/;"	v
+define_any_of	codex-rs/mcp-types/generate_mcp_types.py	/^def define_any_of($/;"	f
+define_string_enum	codex-rs/mcp-types/generate_mcp_types.py	/^def define_string_enum($/;"	f
+define_struct	codex-rs/mcp-types/generate_mcp_types.py	/^def define_struct($/;"	f
+define_untagged_enum	codex-rs/mcp-types/generate_mcp_types.py	/^def define_untagged_enum(name: str, type_list: list[str], out: list[str]) -> None:$/;"	f
+definitions	codex-rs/mcp-types/generate_mcp_types.py	/^    definitions = schema_json["definitions"]$/;"	v
+defn	codex-rs/mcp-types/generate_mcp_types.py	/^        defn = definitions[req_name]$/;"	v
+dots	codex-cli/src/components/vendor/cli-spinners/index.js	/^  dots: {$/;"	p	class:const
+draw	codex-cli/examples/impossible-pong/template/index.html	/^      function draw() {$/;"	f
+drawCircle	codex-cli/examples/impossible-pong/template/index.html	/^      function drawCircle(x, y, r, color = "#fff") {$/;"	f
+drawCourtBoundaries	codex-cli/examples/impossible-pong/template/index.html	/^      function drawCourtBoundaries() {$/;"	f
+drawRect	codex-cli/examples/impossible-pong/template/index.html	/^      function drawRect(x, y, w, h, color = "#fff") {$/;"	f
+embed_texts	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def embed_texts(texts: Sequence[str], model: str, batch_size: int = 100) -> list[list[float]]:$/;"	f
+emit_doc_comment	codex-rs/mcp-types/generate_mcp_types.py	/^def emit_doc_comment(text: str | None, out: list[str]) -> None:$/;"	f
+extra_defs	codex-rs/mcp-types/generate_mcp_types.py	/^extra_defs = []$/;"	v
+generate_markdown_report	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def generate_markdown_report($/;"	f
+generate_toc_lines	scripts/readme_toc.py	/^def generate_toc_lines(content: str) -> List[str]:$/;"	f
+get_serde_annotation_for_anyof_type	codex-rs/mcp-types/generate_mcp_types.py	/^def get_serde_annotation_for_anyof_type(type_name: str) -> str | None:$/;"	f
+implements_notification_trait	codex-rs/mcp-types/generate_mcp_types.py	/^def implements_notification_trait(name: str) -> bool:$/;"	f
+implements_request_trait	codex-rs/mcp-types/generate_mcp_types.py	/^def implements_request_trait(name: str) -> bool:$/;"	f
+infer_result_type	codex-rs/mcp-types/generate_mcp_types.py	/^def infer_result_type(request_type_name: str) -> str:$/;"	f
+label_clusters	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def label_clusters($/;"	f
+lint_utf8_ascii	scripts/asciicheck.py	/^def lint_utf8_ascii(filename: Path, fix: bool) -> bool:$/;"	f
+load_or_create_embeddings	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def load_or_create_embeddings($/;"	f
+loop	codex-cli/examples/impossible-pong/template/index.html	/^      function loop() {$/;"	f
+main	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def main() -> None:  # noqa: D401$/;"	f
+main	codex-rs/mcp-types/generate_mcp_types.py	/^def main() -> int:$/;"	f
+main	scripts/asciicheck.py	/^def main() -> int:$/;"	f
+main	scripts/readme_toc.py	/^def main() -> int:$/;"	f
+map_type	codex-rs/mcp-types/generate_mcp_types.py	/^def map_type($/;"	f
+method_const	codex-rs/mcp-types/generate_mcp_types.py	/^        method_const = ($/;"	v
+n_def	codex-rs/mcp-types/generate_mcp_types.py	/^        n_def = definitions[notif_name]$/;"	v
+name	codex-cli/ignore-react-devtools-plugin.js	/^  name: "ignore-react-devtools",$/;"	p	class:const
+opponent	codex-cli/examples/impossible-pong/template/index.html	/^      function opponent(winner) {$/;"	f
+parse_cli	codex-cli/examples/prompt-analyzer/template/cluster_prompts.py	/^def parse_cli() -> argparse.Namespace:  # noqa: D401$/;"	f
+payload_type	codex-rs/mcp-types/generate_mcp_types.py	/^        payload_type = f"<{notif_name} as ModelContextProtocolNotification>::Params"$/;"	v
+payload_type	codex-rs/mcp-types/generate_mcp_types.py	/^        payload_type = f"<{req_name} as ModelContextProtocolRequest>::Params"$/;"	v
+resetBall	codex-cli/examples/impossible-pong/template/index.html	/^      function resetBall() {$/;"	f
+rust_prop_name	codex-rs/mcp-types/generate_mcp_types.py	/^def rust_prop_name(name: str, is_optional: bool) -> RustProp:$/;"	f
+stderr	codex-rs/mcp-types/generate_mcp_types.py	/^        stderr=subprocess.DEVNULL,$/;"	v
+styles	codex-cli/src/components/vendor/ink-select/theme.js	/^  styles: {$/;"	p	class:const
+tennisDisplay	codex-cli/examples/impossible-pong/template/index.html	/^      function tennisDisplay() {$/;"	f
+to_snake_case	codex-rs/mcp-types/generate_mcp_types.py	/^def to_snake_case(name: str) -> str:$/;"	f
+type_from_ref	codex-rs/mcp-types/generate_mcp_types.py	/^def type_from_ref(ref: str) -> str:$/;"	f
+update	codex-cli/examples/impossible-pong/template/index.html	/^      function update() {$/;"	f
+updateScore	codex-cli/examples/impossible-pong/template/index.html	/^      function updateScore(winner) {$/;"	f
+usage	codex-cli/scripts/stage_release.sh	/^usage() {$/;"	f
